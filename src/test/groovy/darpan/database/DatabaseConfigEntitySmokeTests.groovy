@@ -33,8 +33,9 @@ class DatabaseConfigEntitySmokeTests {
                          databaseName: "orders", username: "darpan_ro", password: "s3cret"])
                 .create()
         def row = ec.entity.find("darpan.database.DatabaseSourceConfig")
-                .condition("host", "db.example.internal").disableAuthz().one()
+                .condition("databaseSourceConfigId", "TEST_DB_CONF").disableAuthz().one()
         assertNotNull(row)
+        assertEquals("db.example.internal", row.host) // stored as written
         assertEquals("s3cret", row.password)          // decrypted transparently on read
         assertEquals("MYSQL", row.dialect)            // default applied
         assertEquals(500000L, row.maxRows)            // default applied
@@ -45,7 +46,7 @@ class DatabaseConfigEntitySmokeTests {
         // Create config first (tests are independent, so prior test state is not available)
         ec.entity.makeValue("darpan.database.DatabaseSourceConfig")
                 .setAll([databaseSourceConfigId: "TEST_DB_CONF_2",
-                         description: "test", host: "db.example.internal", port: 3306L,
+                         description: "test", host: "db2.example.internal", port: 3306L,
                          databaseName: "orders", username: "darpan_ro", password: "s3cret"])
                 .create()
         // Create query attached to config
