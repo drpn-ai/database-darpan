@@ -68,6 +68,26 @@ class DatabaseExtractionServiceSmokeTests {
         ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
                 databaseSourceQueryId: "KREWE_QUERY", databaseSourceConfigId: "KREWE_CONF",
                 companyUserGroupId: "KREWE", sqlSelect: "SELECT 1 AS one"]).create()
+
+        // Null-tenant-scope fixtures (defense-in-depth: companyUserGroupId is nullable on BOTH entities,
+        // so the config/query cross-check must fail CLOSED when either side has no tenant scope — a
+        // null==null equality must never read as "same tenant"). Mirrors the Task 9 preview fixtures.
+        //   NULL_TENANT_CONF   — config with no tenant.
+        //   NULL_TENANT_QUERY  — query with no tenant, pointing at NULL_TENANT_CONF (the both-null case;
+        //                        on the interactive path requireTenantRecordAccess rejects it upstream).
+        //   KREWE_QUERY_NULL_CONF — query owned by the active tenant (its own fence passes) pointing at
+        //                        the null-tenant config: the REACHABLE config-null case that actually
+        //                        exercises the new "missing tenant scope" guard.
+        ec.entity.makeValue("darpan.database.DatabaseSourceConfig").setAll([
+                databaseSourceConfigId: "NULL_TENANT_CONF",
+                host: "unreachable.invalid", databaseName: "orders", username: "u", password: "p",
+                connectTimeoutSeconds: 1L]).create()
+        ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
+                databaseSourceQueryId: "NULL_TENANT_QUERY", databaseSourceConfigId: "NULL_TENANT_CONF",
+                sqlSelect: "SELECT 1 AS one"]).create()
+        ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
+                databaseSourceQueryId: "KREWE_QUERY_NULL_CONF", databaseSourceConfigId: "NULL_TENANT_CONF",
+                companyUserGroupId: "KREWE", sqlSelect: "SELECT 1 AS one"]).create()
     }
 
     @BeforeEach
@@ -169,6 +189,41 @@ class DatabaseExtractionServiceSmokeTests {
         assertFalse(joined.contains("active tenant"),
                 "tenant fence should have passed for an in-tenant query, got: ${out.errors}")
         assertFalse((out.errors as List).isEmpty(), "expected a downstream extraction error")
+    }
+
+    @Test
+    void crossCheckFailsClosedWhenConfigHasNoTenantScope() {
+        // KREWE_QUERY_NULL_CONF is owned by the active tenant (KREWE) so its own tenant fence passes, but
+        // its config (NULL_TENANT_CONF) has a null companyUserGroupId. This is the REACHABLE config-null
+        // case: the config/query cross-check must fail CLOSED on the missing tenant scope rather than let
+        // the equality slip. Before the fix a null config tenant produced a generic "different tenants"
+        // message; the guard now names the real problem. No file is written.
+        Map out = ec.service.sync().name("reconciliation.DatabaseExtractionServices.extract#DatabaseRecords")
+                .parameters([databaseSourceQueryId: "KREWE_QUERY_NULL_CONF",
+                             windowStart: Timestamp.valueOf("2026-07-01 00:00:00"),
+                             windowEnd: Timestamp.valueOf("2026-07-02 00:00:00")])
+                .disableAuthz().call()
+        assertEquals(false, out.dataAvailable)
+        assertNull(out.fileLocation)
+        assertTrue((out.errors as List).join(" ").toLowerCase().contains("missing tenant scope"),
+                "expected fail-closed missing-tenant-scope rejection, got: ${out.errors}")
+    }
+
+    @Test
+    void interactivePathRejectsBothNullTenantRows() {
+        // Both the query (NULL_TENANT_QUERY) and its config (NULL_TENANT_CONF) have a null tenant. On the
+        // interactive path (no companyUserGroupId) requireTenantRecordAccess rejects the null-tenant query
+        // upstream, so the config cross-check is never reached — a null==null equality could never slip
+        // through here. The service must reject and write no file (defense-in-depth: two layers fail
+        // closed on a scope-less query, so the error text is generic rather than the cross-check's).
+        Map out = ec.service.sync().name("reconciliation.DatabaseExtractionServices.extract#DatabaseRecords")
+                .parameters([databaseSourceQueryId: "NULL_TENANT_QUERY",
+                             windowStart: Timestamp.valueOf("2026-07-01 00:00:00"),
+                             windowEnd: Timestamp.valueOf("2026-07-02 00:00:00")])
+                .disableAuthz().call()
+        assertEquals(false, out.dataAvailable)
+        assertNull(out.fileLocation)
+        assertFalse((out.errors as List).isEmpty(), "expected a fail-closed rejection for a scope-less query")
     }
 
     private Map callExtract(String queryId) {

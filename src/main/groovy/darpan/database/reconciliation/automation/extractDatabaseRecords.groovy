@@ -34,9 +34,19 @@ if (queryRow && !ec.message.hasError()) {
     configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
             .condition("databaseSourceConfigId", queryRow.databaseSourceConfigId)
             .disableAuthz().useCache(false).one()
-    if (!configRow) ec.message.addError("Database connection ${queryRow.databaseSourceConfigId} not found.")
-    else if (configRow.companyUserGroupId?.toString()?.trim() != queryRow.companyUserGroupId?.toString()?.trim())
+    String queryTenant = queryRow.companyUserGroupId?.toString()?.trim()
+    String configTenant = configRow?.companyUserGroupId?.toString()?.trim()
+    if (!configRow) {
+        ec.message.addError("Database connection ${queryRow.databaseSourceConfigId} not found.")
+    } else if (!queryTenant || !configTenant) {
+        // Fail CLOSED on a null/blank tenant on EITHER side. companyUserGroupId is nullable on both
+        // entities (type="id", no not-null), so a bare equality below would read null==null as "same
+        // tenant" and let a scope-less pair through unverified. Missing tenant scope is never valid.
+        // Mirrors the previewDatabaseQuery.groovy Task 9 hardening.
+        ec.message.addError("Database source query or connection is missing tenant scope.")
+    } else if (configTenant != queryTenant) {
         ec.message.addError("Database connection and query belong to different tenants.")
+    }
 }
 if (queryRow && (queryRow.isActive ?: "Y").toString().equalsIgnoreCase("N")) ec.message.addError("Database source query ${queryIdValue} is inactive.")
 if (configRow && (configRow.isActive ?: "Y").toString().equalsIgnoreCase("N")) ec.message.addError("Database connection ${configRow.databaseSourceConfigId} is inactive.")
