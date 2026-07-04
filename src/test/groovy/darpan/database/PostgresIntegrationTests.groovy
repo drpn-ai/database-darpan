@@ -1,0 +1,50 @@
+package darpan.database
+
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+
+import java.sql.DriverManager
+import java.sql.Timestamp
+
+import static org.junit.jupiter.api.Assertions.*
+
+/** Runs only when DARPAN_PG_TEST_HOST is set. Start a disposable Postgres first:
+ *  docker run --rm -d --name darpan-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=recon_test -p 15432:5432 postgres:16
+ */
+@EnabledIfEnvironmentVariable(named = "DARPAN_PG_TEST_HOST", matches = ".+")
+class PostgresIntegrationTests {
+    private static Map config() {
+        [dialect: "POSTGRES", host: System.getenv("DARPAN_PG_TEST_HOST"),
+         port: (System.getenv("DARPAN_PG_TEST_PORT") ?: "15432") as long,
+         databaseName: "recon_test", username: "postgres", password: System.getenv("DARPAN_PG_TEST_PASSWORD") ?: "test",
+         requireTls: "N", connectTimeoutSeconds: 5L, queryTimeoutSeconds: 30L, maxRows: 1000L]
+    }
+
+    @Test
+    void extractsSeededRowsEndToEnd() {
+        def conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
+        conn.createStatement().execute("DROP TABLE IF EXISTS orders")
+        conn.createStatement().execute("CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2), updated_at TIMESTAMP)")
+        conn.createStatement().execute("INSERT INTO orders VALUES (1, 10.5, '2026-07-01 10:00:00'), (2, 20.0, '2026-07-02 10:00:00')")
+        conn.close()
+
+        Map result = DatabaseExtractionSupport.runExtraction(config(),
+                [sqlSelect: "SELECT id, total FROM orders WHERE updated_at BETWEEN :windowStart AND :windowEnd"],
+                Timestamp.valueOf("2026-07-01 00:00:00"), Timestamp.valueOf("2026-07-03 00:00:00"))
+        assertEquals([], result.errors)
+        assertTrue(result.dataAvailable as boolean)
+        assertEquals(2L, result.recordCount)
+    }
+
+    @Test
+    void readOnlySessionBlocksWrites() {
+        // NOTE: connectionProperties sets readOnlyMode=always, but the pg driver only enforces it when
+        // the connection is marked read-only — this test proves the combined shape actually blocks writes.
+        def conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
+        conn.setReadOnly(true)
+        conn.setAutoCommit(false)
+        JdbcUrlSupport.readOnlySessionStatements("POSTGRES").each { conn.createStatement().execute(it) }
+        assertThrows(Exception) { conn.createStatement().executeUpdate("INSERT INTO orders VALUES (99, 1, NOW())") }
+        conn.close()
+    }
+}
