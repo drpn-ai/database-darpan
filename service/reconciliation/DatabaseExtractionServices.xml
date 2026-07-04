@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    <service verb="extract" noun="DatabaseRecords" type="script" transaction="ignore" allow-remote="false" authenticate="true"
+            location="component://database-darpan/src/main/groovy/darpan/database/reconciliation/automation/extractDatabaseRecords.groovy">
+        <description>Runs a validated parameterized SELECT against a configured customer database
+            (MySQL / PostgreSQL / IBM Db2) and writes the result to a staged JSON file for
+            reconciliation. Same contract as the OMS/Shopify extractors.</description>
+        <in-parameters>
+            <parameter name="databaseSourceQueryId" required="true">
+                <description>DatabaseSourceQuery to execute (resolves its DatabaseSourceConfig connection).</description>
+            </parameter>
+            <parameter name="automationExecutionId"/>
+            <parameter name="companyUserGroupId"/>
+            <parameter name="windowStart" type="Timestamp" required="true"/>
+            <parameter name="windowEnd" type="Timestamp" required="true"/>
+            <parameter name="outputLocation"/>
+            <parameter name="fileName"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="dataAvailable" type="Boolean"/>
+            <parameter name="fileLocation"/>
+            <parameter name="fileName"/>
+            <parameter name="recordCount" type="Integer"/>
+            <parameter name="requestMetadata" type="Map"/>
+            <parameter name="warnings" type="List"/>
+            <parameter name="errors" type="List"/>
+        </out-parameters>
+    </service>
+</services>

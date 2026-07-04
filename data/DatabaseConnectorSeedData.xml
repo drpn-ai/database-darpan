@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Registry row for the generic database source. Ships with the component so core darpan never
+     references database-darpan: absent component => absent row => DATABASE is not dispatchable. -->
+<entity-facade-xml type="darpan-seed">
+    <darpan.reconciliation.SourceSystemConnector
+            systemEnumId="DATABASE"
+            extractServiceName="reconciliation.DatabaseExtractionServices.extract#DatabaseRecords"
+            dateFromParameterName="windowStart"
+            dateToParameterName="windowEnd"
+            expectedSourceConfigType="DATABASE_QUERY"
+            configParameterName="databaseSourceQueryId"
+            configEntityName="darpan.database.DatabaseSourceQuery"
+            systemAliases="DATABASE,DB,DAR_SYS_DATABASE"
+            preserveWindowInstants="N"
+            enabled="Y"/>
+</entity-facade-xml>
