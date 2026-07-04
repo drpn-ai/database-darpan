@@ -18,6 +18,14 @@ class JdbcUrlSupport {
         return d
     }
 
+    /** Normalize + validate a bare dialect code. Fails CLOSED: an unknown/un-normalized dialect throws
+     * rather than silently falling through to a permissive default. */
+    private static String requireDialect(String dialect) {
+        String d = dialect?.trim()?.toUpperCase()
+        if (!d || !DIALECTS.containsKey(d)) throw new IllegalArgumentException("Unsupported dialect '${dialect}' (supported: ${DIALECTS.keySet().join(', ')})")
+        return d
+    }
+
     static String buildUrl(Map config) {
         Map d = DIALECTS[dialectOf(config)]
         String host = requireMatch(config.host?.toString()?.trim(), HOST_PATTERN, "host")
@@ -62,15 +70,15 @@ class JdbcUrlSupport {
     /** Session-level read-only statements executed right after connect (first fence; the second is the
      * documented SELECT-only grant). Db2 LUW has no session-level statement — grant + setReadOnly only. */
     static List<String> readOnlySessionStatements(String dialect) {
-        switch (dialect) {
+        switch (requireDialect(dialect)) {
             case "MYSQL": return ["SET SESSION TRANSACTION READ ONLY"]
             case "POSTGRES": return ["SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"]
-            default: return []
+            default: return []   // DB2 LUW: known dialect, no session-level statement — [] is a VALID result
         }
     }
 
     static String testQuery(String dialect) {
-        return dialect == "DB2" ? "SELECT 1 FROM SYSIBM.SYSDUMMY1" : "SELECT 1"
+        return requireDialect(dialect) == "DB2" ? "SELECT 1 FROM SYSIBM.SYSDUMMY1" : "SELECT 1"
     }
 
     private static String requireMatch(String value, def pattern, String label) {

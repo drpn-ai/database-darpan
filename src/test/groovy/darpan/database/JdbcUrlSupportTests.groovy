@@ -32,6 +32,7 @@ class JdbcUrlSupportTests {
         assertEquals("true", p.getProperty("useCursorFetch"))
         assertEquals("REQUIRED", p.getProperty("sslMode"))
         assertEquals("10000", p.getProperty("connectTimeout"))   // Connector/J: milliseconds
+        assertEquals("300000", p.getProperty("socketTimeout"))   // Connector/J: milliseconds
         assertEquals("darpan_ro", p.getProperty("user"))
     }
     @Test void postgresProperties() {
@@ -55,12 +56,18 @@ class JdbcUrlSupportTests {
     @Test void readOnlySessionStatementsPerDialect() {
         assertEquals(["SET SESSION TRANSACTION READ ONLY"], JdbcUrlSupport.readOnlySessionStatements("MYSQL"))
         assertEquals(["SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"], JdbcUrlSupport.readOnlySessionStatements("POSTGRES"))
-        assertEquals([], JdbcUrlSupport.readOnlySessionStatements("DB2"))
+        assertEquals([], JdbcUrlSupport.readOnlySessionStatements("DB2"))   // DB2 known → [] is valid, NOT a throw
+    }
+    @Test void readOnlySessionStatementsFailsClosedOnUnknownDialect() {
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.readOnlySessionStatements("BADVALUE") }
     }
     @Test void testQueryPerDialect() {
         assertEquals("SELECT 1", JdbcUrlSupport.testQuery("MYSQL"))
         assertEquals("SELECT 1", JdbcUrlSupport.testQuery("POSTGRES"))
         assertEquals("SELECT 1 FROM SYSIBM.SYSDUMMY1", JdbcUrlSupport.testQuery("DB2"))
+    }
+    @Test void testQueryFailsClosedOnUnknownDialect() {
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.testQuery("nope") }
     }
     @Test void rejectsHostWithUrlMetaCharacters() {
         ["db/evil", "db?x=1", "db&y=2", "db host", "db:3306"].each { bad ->
