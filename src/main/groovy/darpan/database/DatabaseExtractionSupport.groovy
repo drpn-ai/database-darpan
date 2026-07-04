@@ -24,7 +24,15 @@ class DatabaseExtractionSupport {
         return [sql: sb.toString(), bindNames: bindNames]
     }
 
-    static Map extractRows(Connection conn, String sql, Map<String, Timestamp> binds, long maxRows, long queryTimeoutSeconds) {
+    /**
+     * @param capIsLimit false (default): exceeding maxRows FAILS the extraction with zero rows —
+     *        reconciliation correctness demands fail-not-truncate, since a partial extract
+     *        manufactures false discrepancies for every record past the cap. Every reconciliation
+     *        extraction call site relies on this and must keep omitting this parameter.
+     *        true: the cap is a silent LIMIT — stop reading at maxRows and return exactly those rows
+     *        with no error. Only the query-preview facade (10-row cap) may pass true.
+     */
+    static Map extractRows(Connection conn, String sql, Map<String, Timestamp> binds, long maxRows, long queryTimeoutSeconds, boolean capIsLimit = false) {
         Map prepared = prepareStatementSql(sql)
         List<Map> rows = []
         PreparedStatement ps = conn.prepareStatement(prepared.sql as String, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -38,6 +46,7 @@ class DatabaseExtractionSupport {
             int cols = md.getColumnCount()
             while (rs.next()) {
                 if (rows.size() >= maxRows) {
+                    if (capIsLimit) break   // silent LIMIT: stop reading, return exactly maxRows rows
                     // Reconciliation correctness demands fail-not-truncate: a partial extract
                     // manufactures false discrepancies for every record past the cap.
                     return [rows: [], recordCount: 0L,

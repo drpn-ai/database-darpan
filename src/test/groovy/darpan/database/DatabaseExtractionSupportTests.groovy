@@ -58,6 +58,16 @@ class DatabaseExtractionSupportTests {
     }
 
     @Test
+    void capIsLimitTrueReturnsExactlyMaxRowsWithoutError() {
+        // Preview's silent-LIMIT contract: same 3-row table, same 2-row cap as the fail-not-truncate
+        // test above, but capIsLimit=true must return exactly maxRows rows with NO error.
+        Map result = DatabaseExtractionSupport.extractRows(conn, "SELECT id FROM orders", [:], 2L, 30L, true)
+        assertEquals([], result.errors)
+        assertEquals(2L, result.recordCount)
+        assertEquals(2, result.rows.size())
+    }
+
+    @Test
     void queryWithoutPlaceholdersRunsUnbound() {
         Map result = DatabaseExtractionSupport.extractRows(conn, "SELECT COUNT(*) AS n FROM orders", [:], 10L, 30L)
         assertEquals([], result.errors)

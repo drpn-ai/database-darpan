@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    <service verb="validate" noun="DatabaseConnection" type="script" transaction="ignore" authenticate="true"
+            location="component://database-darpan/src/main/groovy/darpan/database/facade/validateDatabaseConnection.groovy">
+        <description>Connects and runs the dialect test query. Accepts a saved config id or transient fields (pre-save test).</description>
+        <in-parameters>
+            <parameter name="databaseSourceConfigId"/>
+            <parameter name="host"/><parameter name="port" type="Long"/>
+            <parameter name="databaseName"/><parameter name="username"/><parameter name="password"/>
+            <parameter name="requireTls"/><parameter name="connectTimeoutSeconds" type="Long"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="ok" type="Boolean"/>
+            <parameter name="serverVersion"/>
+            <parameter name="error"/>
+        </out-parameters>
+    </service>
+    <service verb="preview" noun="DatabaseQuery" type="script" transaction="ignore" authenticate="true"
+            location="component://database-darpan/src/main/groovy/darpan/database/facade/previewDatabaseQuery.groovy">
+        <description>Validates and runs a SELECT capped at 10 rows for the query editor preview.</description>
+        <in-parameters>
+            <parameter name="databaseSourceQueryId"/>
+            <parameter name="databaseSourceConfigId"/><parameter name="sqlSelect"/>
+            <parameter name="windowStart" type="Timestamp"/><parameter name="windowEnd" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="columns" type="List"/>
+            <parameter name="rows" type="List"/>
+            <parameter name="error"/>
+        </out-parameters>
+    </service>
+</services>
