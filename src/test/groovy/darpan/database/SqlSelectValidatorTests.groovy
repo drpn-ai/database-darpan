@@ -32,4 +32,28 @@ class SqlSelectValidatorTests {
     @Test void rejectsPostgresCopy() { assertFalse(ok('COPY orders TO \'/tmp/x\'')) }
     @Test void rejectsPostgresDoBlock() { assertFalse(ok('DO $x$ BEGIN NULL END $x$')) }
     @Test void rejectsBlankSql() { assertFalse(ok("   ")) }
+
+    // --- Golden witnesses for the comment/quote-order and executable-comment bypasses ---
+
+    @Test void rejectsCommentQuoteOrderBypassIntoOutfile() {
+        assertFalse(ok("SELECT * FROM orders -- '\nINTO OUTFILE '/tmp/x.csv' -- '"))
+    }
+
+    @Test void rejectsCommentQuoteOrderBypassForUpdate() {
+        assertFalse(ok("SELECT id FROM orders WHERE x = 1 -- '\nFOR UPDATE -- '"))
+    }
+
+    @Test void rejectsExecutableVersionComment() {
+        assertFalse(ok("SELECT 1 /*!50000 ; DROP TABLE orders*/"))
+    }
+
+    // --- Defensive cases: comment-like sequences inside real string literals must stay inert ---
+
+    @Test void acceptsDoubleDashInsideStringLiteral() {
+        assertTrue(ok("SELECT id FROM t WHERE note = 'a -- b'"))
+    }
+
+    @Test void acceptsBlockCommentOpenerInsideStringLiteral() {
+        assertTrue(ok("SELECT id FROM t WHERE note = 'a /* b'"))
+    }
 }
