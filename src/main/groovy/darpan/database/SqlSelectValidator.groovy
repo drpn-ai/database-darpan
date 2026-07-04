@@ -25,6 +25,10 @@ class SqlSelectValidator {
      *
      * MySQL executable version comments (/*! ... *\/) are rejected outright rather than parsed, since
      * MySQL executes their body as live SQL and no legitimate reconciliation SELECT needs them.
+     *
+     * Unterminated string literals and unterminated block comments fail CLOSED: an explicit error is
+     * pushed and the scan keeps going through the body (never silently swallowing the tail), so the
+     * returned error list is guaranteed non-empty regardless of what the fallthrough content contains.
      */
     private static Map stripLiteralsAndComments(String raw) {
         StringBuilder out = new StringBuilder()
@@ -35,32 +39,50 @@ class SqlSelectValidator {
             char c = raw.charAt(i)
             if (c == ('\'' as char)) {
                 int j = i + 1
+                boolean closed = false
                 while (j < n) {
                     char cj = raw.charAt(j)
                     if (cj == ('\\' as char) && j + 1 < n) { j += 2; continue }
                     if (cj == ('\'' as char)) {
                         if (j + 1 < n && raw.charAt(j + 1) == ('\'' as char)) { j += 2; continue }
                         j += 1
+                        closed = true
                         break
                     }
                     j += 1
                 }
-                out.append("''")
-                i = j
+                if (closed) {
+                    out.append("''")
+                    i = j
+                } else {
+                    errors << "Unterminated string literal."
+                    // Fail closed: do not swallow the tail. Keep scanning the body so any live SQL
+                    // after the lone quote still trips the downstream checks too.
+                    out.append(c)
+                    i += 1
+                }
             } else if (c == ('"' as char)) {
                 int j = i + 1
+                boolean closed = false
                 while (j < n) {
                     char cj = raw.charAt(j)
                     if (cj == ('\\' as char) && j + 1 < n) { j += 2; continue }
                     if (cj == ('"' as char)) {
                         if (j + 1 < n && raw.charAt(j + 1) == ('"' as char)) { j += 2; continue }
                         j += 1
+                        closed = true
                         break
                     }
                     j += 1
                 }
-                out.append('""')
-                i = j
+                if (closed) {
+                    out.append('""')
+                    i = j
+                } else {
+                    errors << "Unterminated string literal."
+                    out.append(c)
+                    i += 1
+                }
             } else if (c == ('-' as char) && i + 1 < n && raw.charAt(i + 1) == ('-' as char)) {
                 int nl = raw.indexOf('\n', i)
                 out.append(' ')
@@ -78,8 +100,15 @@ class SqlSelectValidator {
                     i += 1
                 } else {
                     int end = raw.indexOf("*/", i + 2)
-                    out.append(' ')
-                    i = (end < 0) ? n : end + 2
+                    if (end < 0) {
+                        errors << "Unterminated comment."
+                        // Fail closed: keep scanning the body instead of discarding the tail.
+                        out.append(c)
+                        i += 1
+                    } else {
+                        out.append(' ')
+                        i = end + 2
+                    }
                 }
             } else {
                 out.append(c)

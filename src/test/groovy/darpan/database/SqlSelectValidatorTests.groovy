@@ -47,6 +47,16 @@ class SqlSelectValidatorTests {
         assertFalse(ok("SELECT 1 /*!50000 ; DROP TABLE orders*/"))
     }
 
+    // --- Unterminated constructs must fail CLOSED, never silently swallow trailing SQL ---
+
+    @Test void rejectsUnterminatedStringLiteral() {
+        assertFalse(ok("SELECT * FROM orders WHERE note = 'unterminated ; DROP TABLE orders"))
+    }
+
+    @Test void rejectsUnterminatedBlockComment() {
+        assertFalse(ok("SELECT * FROM orders /* unterminated ; DROP TABLE orders"))
+    }
+
     // --- Defensive cases: comment-like sequences inside real string literals must stay inert ---
 
     @Test void acceptsDoubleDashInsideStringLiteral() {
