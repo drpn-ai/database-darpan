@@ -39,6 +39,15 @@ class MySqlIntegrationTests {
 
     @Test
     void readOnlySessionBlocksWrites() {
+        // Self-contained: create the table on a separate read-write connection FIRST so the INSERT below
+        // can ONLY throw because of the read-only fence — never because the table is missing. Do NOT
+        // depend on extractsSeededRowsEndToEnd (or any method order) to have created it, otherwise a
+        // "table doesn't exist" error would satisfy assertThrows and silently mask a fence regression.
+        def setup = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
+        setup.createStatement().execute("DROP TABLE IF EXISTS orders")
+        setup.createStatement().execute("CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2), updated_at TIMESTAMP)")
+        setup.close()
+
         // Direct proof: open the hardened connection the same way runExtraction does and verify a write fails.
         def conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
         conn.setReadOnly(true)

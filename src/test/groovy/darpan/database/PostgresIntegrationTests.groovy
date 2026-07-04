@@ -38,6 +38,16 @@ class PostgresIntegrationTests {
 
     @Test
     void readOnlySessionBlocksWrites() {
+        // Self-contained: create the table on a separate read-write connection FIRST so the INSERT below
+        // can ONLY throw because of the read-only fence — never because the table is missing. Do NOT
+        // depend on extractsSeededRowsEndToEnd (or any method order) to have created it, otherwise a
+        // "relation does not exist" error would satisfy assertThrows and silently mask a fence regression.
+        // (readOnlyMode=always only engages once setReadOnly(true) is called, so this connection is R/W.)
+        def setup = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
+        setup.createStatement().execute("DROP TABLE IF EXISTS orders")
+        setup.createStatement().execute("CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2), updated_at TIMESTAMP)")
+        setup.close()
+
         // NOTE: connectionProperties sets readOnlyMode=always, but the pg driver only enforces it when
         // the connection is marked read-only — this test proves the combined shape actually blocks writes.
         def conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
