@@ -57,4 +57,20 @@ class PostgresIntegrationTests {
         assertThrows(Exception) { conn.createStatement().executeUpdate("INSERT INTO orders VALUES (99, 1, NOW())") }
         conn.close()
     }
+
+    @Test
+    void openReadOnlyConnectionAppliesFullFenceAndBlocksWrites() {
+        // DatabaseExtractionSupport.openReadOnlyConnection is the single shared helper both runExtraction
+        // AND previewDatabaseQuery.groovy now use to open their connection (setReadOnly + setAutoCommit(false)
+        // + dialect readOnlySessionStatements). Proving the SHARED method enforces the fence proves both
+        // read paths are equally hardened, rather than re-testing a hand-rolled duplicate of the shape.
+        def setup = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config()), JdbcUrlSupport.connectionProperties(config()))
+        setup.createStatement().execute("DROP TABLE IF EXISTS orders")
+        setup.createStatement().execute("CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2), updated_at TIMESTAMP)")
+        setup.close()
+
+        def conn = DatabaseExtractionSupport.openReadOnlyConnection(config())
+        assertThrows(Exception) { conn.createStatement().executeUpdate("INSERT INTO orders VALUES (99, 1, NOW())") }
+        conn.close()
+    }
 }

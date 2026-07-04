@@ -1,10 +1,8 @@
 import darpan.database.DatabaseExtractionSupport
-import darpan.database.JdbcUrlSupport
 import darpan.database.SqlSelectValidator
 import darpan.facade.common.TenantAccessSupport
 
 import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.Timestamp
 
 String sql = sqlSelect
@@ -62,8 +60,9 @@ Timestamp start = windowStart ?: new Timestamp(end.time - 7L * 24 * 3600 * 1000)
 
 Connection conn = null
 try {
-    conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config), JdbcUrlSupport.connectionProperties(config))
-    conn.setReadOnly(true)
+    // Same read-only fence as extraction (setReadOnly + setAutoCommit(false) + dialect
+    // readOnlySessionStatements) — defense-in-depth applies equally to both read paths.
+    conn = DatabaseExtractionSupport.openReadOnlyConnection(config)
     // capIsLimit=true: preview treats the 10-row cap as a silent LIMIT — return the first 10 rows
     // with no error, unlike the extraction path which fails closed instead of truncating.
     Map result = DatabaseExtractionSupport.extractRows(conn, sql, [windowStart: start, windowEnd: end], 10L, 30L, true)
@@ -77,5 +76,8 @@ try {
 } catch (Exception e) {
     rows = []; columns = []; error = "${e.class.simpleName}: ${e.message}".toString()
 } finally {
-    if (conn != null) try { conn.close() } catch (Exception ignored) { }
+    if (conn != null) {
+        try { conn.commit() } catch (Exception ignored) { }   // close out the read-only transaction (autoCommit is now false)
+        try { conn.close() } catch (Exception ignored) { }
+    }
 }

@@ -6,9 +6,11 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.moqui.context.ExecutionContext
 
 import java.nio.file.Path
+import java.sql.DriverManager
 
 import static org.junit.jupiter.api.Assertions.*
 
@@ -85,6 +87,23 @@ class DatabaseFacadeServiceSmokeTests {
         ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
                 databaseSourceQueryId: "KREWE_QUERY_NULL_CONF", databaseSourceConfigId: "NULL_TENANT_CONF",
                 companyUserGroupId: "KREWE", sqlSelect: "SELECT 1 AS one"]).create()
+
+        // Live-Postgres fixture (only exercised when DARPAN_PG_TEST_HOST is set — see the two
+        // @EnabledIfEnvironmentVariable tests below). Cheap to create unconditionally: it is just an
+        // entity row, no connection is attempted until a gated test actually calls the facade service.
+        String pgHost = System.getenv("DARPAN_PG_TEST_HOST")
+        if (pgHost) {
+            ec.entity.makeValue("darpan.database.DatabaseSourceConfig").setAll([
+                    databaseSourceConfigId: "LIVE_PG_CONF", companyUserGroupId: "KREWE",
+                    dialect: "POSTGRES", host: pgHost, port: (System.getenv("DARPAN_PG_TEST_PORT") ?: "15432") as Long,
+                    databaseName: "recon_test", username: "postgres",
+                    password: System.getenv("DARPAN_PG_TEST_PASSWORD") ?: "test",
+                    requireTls: "N", connectTimeoutSeconds: 5L]).create()
+            ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
+                    databaseSourceQueryId: "LIVE_PG_QUERY", databaseSourceConfigId: "LIVE_PG_CONF",
+                    companyUserGroupId: "KREWE",
+                    sqlSelect: "SELECT id, total FROM orders WHERE updated_at BETWEEN :windowStart AND :windowEnd"]).create()
+        }
     }
 
     @BeforeEach
@@ -187,5 +206,32 @@ class DatabaseFacadeServiceSmokeTests {
         assertTrue((out.error as String).toLowerCase().contains("sqlselect is required"),
                 "expected explicit missing-sqlSelect message, got: ${out.error}")
         assertTrue((out.rows as List).isEmpty())
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "DARPAN_PG_TEST_HOST", matches = ".+")
+    void previewQueryAgainstLivePostgresAppliesReadOnlyFenceAndReturnsRows() {
+        // Fix 1 (defense-in-depth): previewDatabaseQuery.groovy now opens its connection through the
+        // same DatabaseExtractionSupport.openReadOnlyConnection fence (setReadOnly + setAutoCommit(false)
+        // + dialect readOnlySessionStatements) that extraction uses. This proves the hardened preview
+        // path still returns correct rows end-to-end against a real Postgres backing store.
+        Map cfg = [dialect: "POSTGRES", host: System.getenv("DARPAN_PG_TEST_HOST"),
+                   port: (System.getenv("DARPAN_PG_TEST_PORT") ?: "15432") as Long,
+                   databaseName: "recon_test", username: "postgres",
+                   password: System.getenv("DARPAN_PG_TEST_PASSWORD") ?: "test", requireTls: "N"]
+        def setup = DriverManager.getConnection(JdbcUrlSupport.buildUrl(cfg), JdbcUrlSupport.connectionProperties(cfg))
+        setup.createStatement().execute("DROP TABLE IF EXISTS orders")
+        setup.createStatement().execute("CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2), updated_at TIMESTAMP)")
+        setup.createStatement().execute("INSERT INTO orders VALUES (1, 10.5, '2026-07-01 10:00:00'), (2, 20.0, '2026-07-02 10:00:00')")
+        setup.close()
+
+        Map out = ec.service.sync().name("facade.DatabaseFacadeServices.preview#DatabaseQuery")
+                .parameters([databaseSourceQueryId: "LIVE_PG_QUERY",
+                             windowStart: java.sql.Timestamp.valueOf("2026-07-01 00:00:00"),
+                             windowEnd: java.sql.Timestamp.valueOf("2026-07-03 00:00:00")])
+                .disableAuthz().call()
+        assertNull(out.error)
+        assertEquals(2, (out.rows as List).size())
+        assertEquals(["id", "total"] as Set, (out.columns as List) as Set)
     }
 }

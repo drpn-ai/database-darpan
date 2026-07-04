@@ -64,6 +64,21 @@ class DatabaseExtractionSupport {
 
     static String toOutputText(List<Map> rows) { return JsonOutput.toJson(rows) }
 
+    /** Opens a JDBC connection with the full read-only fence: setReadOnly(true), setAutoCommit(false)
+     * (transactional READ ONLY on MySQL; required for pg fetchSize streaming), then the dialect's
+     * readOnlySessionStatements. Shared by runExtraction and the query-preview facade
+     * (previewDatabaseQuery.groovy) so both read paths are equally hardened — neither may open a raw
+     * DriverManager connection and skip a step of this fence. */
+    static Connection openReadOnlyConnection(Map config) {
+        Connection conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config), JdbcUrlSupport.connectionProperties(config))
+        conn.setReadOnly(true)
+        conn.setAutoCommit(false)
+        for (String stmtSql : JdbcUrlSupport.readOnlySessionStatements(JdbcUrlSupport.dialectOf(config))) {
+            conn.createStatement().execute(stmtSql)
+        }
+        return conn
+    }
+
     /** Full extraction against the configured MySQL database. Kept free of Moqui APIs so it is unit-testable. */
     static Map runExtraction(Map config, Map query, Timestamp windowStart, Timestamp windowEnd) {
         List warnings = []
@@ -78,12 +93,7 @@ class DatabaseExtractionSupport {
         long startedAt = System.currentTimeMillis()
         Connection conn = null
         try {
-            conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config), JdbcUrlSupport.connectionProperties(config))
-            conn.setReadOnly(true)
-            conn.setAutoCommit(false)   // transactional READ ONLY on MySQL; required for pg fetchSize streaming
-            for (String stmtSql : JdbcUrlSupport.readOnlySessionStatements(JdbcUrlSupport.dialectOf(config))) {
-                conn.createStatement().execute(stmtSql)
-            }
+            conn = openReadOnlyConnection(config)
             Map result = extractRows(conn, sql,
                     [windowStart: windowStart, windowEnd: windowEnd],
                     (config.maxRows ?: 500000L) as long, (config.queryTimeoutSeconds ?: 300L) as long)
