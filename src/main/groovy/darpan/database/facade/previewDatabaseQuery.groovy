@@ -23,21 +23,32 @@ if (databaseSourceQueryId) {
         // but its databaseSourceConfigId FK is not itself tenant-scoped at the DB level, so a
         // same-tenant cross-check is required here too (mirrors extractDatabaseRecords.groovy's
         // config/query cross-tenant check — the branch flagged as most safety-critical there).
+        String queryTenant = queryRow.companyUserGroupId?.toString()?.trim()
+        String configTenant = configRow?.companyUserGroupId?.toString()?.trim()
         if (!configRow) {
             ec.message.addError("Database connection ${queryRow.databaseSourceConfigId} not found.")
-        } else if (configRow.companyUserGroupId?.toString()?.trim() != queryRow.companyUserGroupId?.toString()?.trim()) {
+        } else if (!queryTenant || !configTenant) {
+            // Fail CLOSED on a null/blank tenant on EITHER side. companyUserGroupId is nullable on both
+            // entities, so a bare equality below would read null==null as "same tenant" and let a
+            // scope-less pair through unverified. Missing tenant scope is never a valid preview.
+            ec.message.addError("Database source query or connection is missing tenant scope.")
+        } else if (configTenant != queryTenant) {
             ec.message.addError("Database connection and query belong to different tenants.")
         } else {
             config = new HashMap(configRow)
         }
     }
 } else if (databaseSourceConfigId) {
-    def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
-            .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
-    TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
-            "Database connection ${databaseSourceConfigId} not found.",
-            "Database connection ${databaseSourceConfigId} is not available in your active tenant.")
-    if (!ec.message.hasError()) config = new HashMap(configRow)
+    if (!sqlSelect) {
+        ec.message.addError("sqlSelect is required when previewing by connection.")
+    } else {
+        def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
+                .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
+        TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
+                "Database connection ${databaseSourceConfigId} not found.",
+                "Database connection ${databaseSourceConfigId} is not available in your active tenant.")
+        if (!ec.message.hasError()) config = new HashMap(configRow)
+    }
 } else {
     ec.message.addError("Provide databaseSourceQueryId or databaseSourceConfigId + sqlSelect.")
 }

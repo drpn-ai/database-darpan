@@ -69,6 +69,22 @@ class DatabaseFacadeServiceSmokeTests {
         ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
                 databaseSourceQueryId: "KREWE_QUERY_CROSS_TENANT_CONF", databaseSourceConfigId: "TENANT_A_CONF",
                 companyUserGroupId: "KREWE", sqlSelect: "SELECT 1 AS one"]).create()
+
+        // Null-tenant-scope fixtures. companyUserGroupId is nullable on BOTH entities, so the cross-tenant
+        // guard must fail CLOSED when either side has no tenant scope (a null==null equality would
+        // otherwise slip through). NULL_TENANT_CONF has no tenant; NULL_TENANT_QUERY (also no tenant)
+        // points at it — the both-null case. KREWE_QUERY_NULL_CONF is owned by the active tenant (so its
+        // own fence passes) but points at the null-tenant config — the reachable config-null case.
+        ec.entity.makeValue("darpan.database.DatabaseSourceConfig").setAll([
+                databaseSourceConfigId: "NULL_TENANT_CONF",
+                host: "unreachable.invalid", databaseName: "orders", username: "u", password: "p",
+                connectTimeoutSeconds: 1L]).create()
+        ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
+                databaseSourceQueryId: "NULL_TENANT_QUERY", databaseSourceConfigId: "NULL_TENANT_CONF",
+                sqlSelect: "SELECT 1 AS one"]).create()
+        ec.entity.makeValue("darpan.database.DatabaseSourceQuery").setAll([
+                databaseSourceQueryId: "KREWE_QUERY_NULL_CONF", databaseSourceConfigId: "NULL_TENANT_CONF",
+                companyUserGroupId: "KREWE", sqlSelect: "SELECT 1 AS one"]).create()
     }
 
     @BeforeEach
@@ -129,6 +145,47 @@ class DatabaseFacadeServiceSmokeTests {
         assertNotNull(out.error)
         assertTrue((out.error as String).toLowerCase().contains("different tenants"),
                 "expected cross-tenant rejection, got: ${out.error}")
+        assertTrue((out.rows as List).isEmpty())
+    }
+
+    @Test
+    void previewQueryFailsClosedWhenConfigHasNoTenantScope() {
+        // KREWE_QUERY_NULL_CONF is owned by the active tenant (KREWE) so its own fence passes, but its
+        // config (NULL_TENANT_CONF) has a null companyUserGroupId. The cross-check must fail CLOSED on the
+        // null tenant scope rather than let the equality slip; before the fix this produced a generic
+        // "different tenants" message and — for a both-null pair — could pass silently.
+        Map out = ec.service.sync().name("facade.DatabaseFacadeServices.preview#DatabaseQuery")
+                .parameters([databaseSourceQueryId: "KREWE_QUERY_NULL_CONF"])
+                .disableAuthz().call()
+        assertNotNull(out.error)
+        assertTrue((out.error as String).toLowerCase().contains("missing tenant scope"),
+                "expected fail-closed missing-tenant-scope rejection, got: ${out.error}")
+        assertTrue((out.rows as List).isEmpty())
+    }
+
+    @Test
+    void previewQueryRejectsBothNullTenantRowsWithoutPreview() {
+        // Both the query and its config have a null companyUserGroupId. The preview must reject and never
+        // connect/preview — a null==null equality must not be read as "same tenant".
+        Map out = ec.service.sync().name("facade.DatabaseFacadeServices.preview#DatabaseQuery")
+                .parameters([databaseSourceQueryId: "NULL_TENANT_QUERY"])
+                .disableAuthz().call()
+        assertNotNull(out.error)
+        assertFalse((out.error as String).isEmpty())
+        assertTrue((out.rows as List).isEmpty())
+        assertTrue((out.columns as List).isEmpty())
+    }
+
+    @Test
+    void previewByConnectionRequiresSqlSelect() {
+        // databaseSourceConfigId supplied without sqlSelect: the request is ill-formed and must be
+        // rejected with a clear message before SqlSelectValidator is handed a null.
+        Map out = ec.service.sync().name("facade.DatabaseFacadeServices.preview#DatabaseQuery")
+                .parameters([databaseSourceConfigId: "KREWE_CONF"])
+                .disableAuthz().call()
+        assertNotNull(out.error)
+        assertTrue((out.error as String).toLowerCase().contains("sqlselect is required"),
+                "expected explicit missing-sqlSelect message, got: ${out.error}")
         assertTrue((out.rows as List).isEmpty())
     }
 }
