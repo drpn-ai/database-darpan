@@ -38,6 +38,34 @@ class DatabaseExtractionSupportTests {
     }
 
     @Test
+    void placeholderInsideStringLiteralIsNotTreatedAsBindMarker() {
+        // A :windowStart token that appears INSIDE a string literal is text data, not a real bind
+        // marker. SqlSelectValidator strips literals before its own checks, so this passes validation;
+        // prepareStatementSql must independently recognize the literal and leave it untouched — only
+        // the real occurrence outside the literal becomes a '?'. Otherwise bindNames.size() would exceed
+        // the true '?' count (the driver never treats a '?' inside quotes as a parameter marker) and
+        // setTimestamp would throw an opaque parameter-index-out-of-range error.
+        Map prepared = DatabaseExtractionSupport.prepareStatementSql(
+                "SELECT id, ':windowStart' AS literal_col FROM orders WHERE updated_at >= :windowStart")
+        assertEquals("SELECT id, ':windowStart' AS literal_col FROM orders WHERE updated_at >= ?", prepared.sql)
+        assertEquals(["windowStart"], prepared.bindNames)
+    }
+
+    @Test
+    void extractRowsBindsCorrectlyWhenPlaceholderTextAppearsInsideAStringLiteral() {
+        // End-to-end regression for the same bug: before the fix this threw a parameter-index error
+        // because bindNames had 3 entries (the in-literal :windowStart, plus the two real ones) while
+        // only 2 real '?' markers exist in the prepared SQL outside the literal.
+        Map result = DatabaseExtractionSupport.extractRows(conn,
+                "SELECT id, ':windowStart' AS literal_col FROM orders WHERE updated_at >= :windowStart AND updated_at < :windowEnd",
+                [windowStart: Timestamp.valueOf("2026-07-01 00:00:00"), windowEnd: Timestamp.valueOf("2026-07-03 00:00:00")],
+                1000L, 30L)
+        assertEquals([], result.errors)
+        assertEquals(2L, result.recordCount)
+        assertEquals(":windowStart", result.rows[0].literal_col)
+    }
+
+    @Test
     void extractsWindowedRowsAsMaps() {
         Map result = DatabaseExtractionSupport.extractRows(conn,
                 "SELECT id, total FROM orders WHERE updated_at BETWEEN :windowStart AND :windowEnd",

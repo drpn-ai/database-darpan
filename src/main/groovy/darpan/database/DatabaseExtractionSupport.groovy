@@ -14,12 +14,25 @@ import java.util.regex.Pattern
 class DatabaseExtractionSupport {
     private static final Pattern NAMED_PLACEHOLDER = Pattern.compile(/:(windowStart|windowEnd)\b/)
 
-    /** Replace :windowStart/:windowEnd with '?' preserving order of appearance. */
+    /** Replace :windowStart/:windowEnd with '?' preserving order of appearance. A placeholder token
+     * that falls inside a string literal or comment is left untouched — it is text data, not a real
+     * bind marker, so replacing it would desync bindNames from the true '?' count and later throw an
+     * opaque parameter-index error out of PreparedStatement.setTimestamp. SqlSelectValidator strips
+     * literals/comments before its own checks, so such a query still passes validation; this method
+     * must independently recognize the same regions (via the shared SqlSelectValidator.literalAndCommentSpans
+     * scan) rather than blindly regex-replacing the raw SQL. */
     static Map prepareStatementSql(String sql) {
+        List<int[]> literalSpans = SqlSelectValidator.literalAndCommentSpans(sql)
         List<String> bindNames = []
         Matcher m = NAMED_PLACEHOLDER.matcher(sql)
         StringBuffer sb = new StringBuffer()
-        while (m.find()) { bindNames << m.group(1); m.appendReplacement(sb, "?") }
+        while (m.find()) {
+            int start = m.start()
+            boolean insideLiteral = literalSpans.any { int[] span -> start >= span[0] && start < span[1] }
+            if (insideLiteral) continue   // leave literal/comment text exactly as-is; not a real bind marker
+            bindNames << m.group(1)
+            m.appendReplacement(sb, "?")
+        }
         m.appendTail(sb)
         return [sql: sb.toString(), bindNames: bindNames]
     }

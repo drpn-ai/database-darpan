@@ -118,6 +118,65 @@ class SqlSelectValidator {
         return [stripped: out.toString(), errors: errors]
     }
 
+    /**
+     * Returns the [start, end) character spans of `raw` that fall inside a string literal or comment
+     * (single/double-quoted literal, --, #, or /* ... *&#47;), using the same left-to-right precedence
+     * as stripLiteralsAndComments (whichever construct opens first wins). Shared with
+     * DatabaseExtractionSupport.prepareStatementSql so a :windowStart/:windowEnd token that appears
+     * inside one of these regions is never mistaken for a real bind placeholder — it is text data, not
+     * SQL, and substituting it with '?' would desync the bind-name list from the true parameter count.
+     *
+     * This intentionally replicates stripLiteralsAndComments's scanning state machine rather than
+     * sharing its implementation: that method also collects errors and rewrites content for validation
+     * purposes, a different contract than "just tell me which ranges are non-code". By the time
+     * prepareStatementSql runs, SqlSelectValidator.validate has already rejected unterminated
+     * literals/comments, so this method treats them the same conservative way (extends to end-of-string)
+     * without needing to raise its own errors.
+     */
+    static List<int[]> literalAndCommentSpans(String raw) {
+        List<int[]> spans = []
+        int n = raw.length()
+        int i = 0
+        while (i < n) {
+            char c = raw.charAt(i)
+            if (c == ('\'' as char) || c == ('"' as char)) {
+                char quote = c
+                int start = i
+                int j = i + 1
+                while (j < n) {
+                    char cj = raw.charAt(j)
+                    if (cj == ('\\' as char) && j + 1 < n) { j += 2; continue }
+                    if (cj == quote) {
+                        if (j + 1 < n && raw.charAt(j + 1) == quote) { j += 2; continue }
+                        j += 1
+                        break
+                    }
+                    j += 1
+                }
+                spans << ([start, j] as int[])
+                i = j
+            } else if (c == ('-' as char) && i + 1 < n && raw.charAt(i + 1) == ('-' as char)) {
+                int nl = raw.indexOf('\n', i)
+                int end = (nl < 0) ? n : nl
+                spans << ([i, end] as int[])
+                i = end
+            } else if (c == ('#' as char)) {
+                int nl = raw.indexOf('\n', i)
+                int end = (nl < 0) ? n : nl
+                spans << ([i, end] as int[])
+                i = end
+            } else if (c == ('/' as char) && i + 1 < n && raw.charAt(i + 1) == ('*' as char)) {
+                int close = raw.indexOf("*/", i + 2)
+                int end = (close < 0) ? n : close + 2
+                spans << ([i, end] as int[])
+                i = end
+            } else {
+                i += 1
+            }
+        }
+        return spans
+    }
+
     static List<String> validate(String sql) {
         List<String> errors = []
         String raw = sql?.trim()
