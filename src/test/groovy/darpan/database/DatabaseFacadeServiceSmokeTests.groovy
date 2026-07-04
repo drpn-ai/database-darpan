@@ -234,4 +234,23 @@ class DatabaseFacadeServiceSmokeTests {
         assertEquals(2, (out.rows as List).size())
         assertEquals(["id", "total"] as Set, (out.columns as List) as Set)
     }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "DARPAN_PG_TEST_HOST", matches = ".+")
+    void validateConnectionTransientWithPostgresDialectSucceedsAgainstRealPostgres() {
+        // Fix 2: validate#DatabaseConnection's transient (pre-save "Test Connection") path had no
+        // dialect in-parameter, so JdbcUrlSupport.dialectOf defaulted to MYSQL and built a
+        // jdbc:mysql:// URL even for a real Postgres host — broken for any non-MySQL dialect. Passing
+        // dialect=POSTGRES here must now thread through to a working jdbc:postgresql:// connection.
+        Map out = ec.service.sync().name("facade.DatabaseFacadeServices.validate#DatabaseConnection")
+                .parameters([host: System.getenv("DARPAN_PG_TEST_HOST"),
+                             port: (System.getenv("DARPAN_PG_TEST_PORT") ?: "15432") as Long,
+                             databaseName: "recon_test", username: "postgres",
+                             password: System.getenv("DARPAN_PG_TEST_PASSWORD") ?: "test",
+                             dialect: "POSTGRES", requireTls: "N", connectTimeoutSeconds: 5L])
+                .disableAuthz().call()
+        assertEquals(true, out.ok)
+        assertNull(out.error)
+        assertNotNull(out.serverVersion)
+    }
 }

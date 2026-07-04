@@ -14,8 +14,11 @@ if (databaseSourceConfigId) {
     if (ec.message.hasError()) { ok = false; error = ec.message.getErrors().join("; "); ec.message.clearErrors(); return }
     config = new HashMap(row)
 } else {
+    // Transient (pre-save "Test Connection") path: dialect must be threaded through explicitly, or
+    // JdbcUrlSupport.dialectOf defaults it to MYSQL — building a jdbc:mysql:// URL against a
+    // Postgres/Db2 host. The saved-config branch above is unaffected: configRow already carries dialect.
     config = [host: host, port: port, databaseName: databaseName, username: username,
-              password: password, requireTls: requireTls ?: "Y", connectTimeoutSeconds: connectTimeoutSeconds ?: 10L]
+              password: password, dialect: dialect, requireTls: requireTls ?: "Y", connectTimeoutSeconds: connectTimeoutSeconds ?: 10L]
 }
 
 Connection conn = null

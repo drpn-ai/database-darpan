@@ -7,6 +7,7 @@
             <parameter name="databaseSourceConfigId"/>
             <parameter name="host"/><parameter name="port" type="Long"/>
             <parameter name="databaseName"/><parameter name="username"/><parameter name="password"/>
+            <parameter name="dialect"/>
             <parameter name="requireTls"/><parameter name="connectTimeoutSeconds" type="Long"/>
         </in-parameters>
         <out-parameters>
