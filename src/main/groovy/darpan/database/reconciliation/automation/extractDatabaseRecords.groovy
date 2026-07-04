@@ -42,24 +42,16 @@ if (queryRow && (queryRow.isActive ?: "Y").toString().equalsIgnoreCase("N")) ec.
 if (configRow && (configRow.isActive ?: "Y").toString().equalsIgnoreCase("N")) ec.message.addError("Database connection ${configRow.databaseSourceConfigId} is inactive.")
 
 if (ec.message.hasError()) {
-    // Deviation from extractOmsOrders.groovy: that script leaves the errors on ec.message after
-    // copying them into the out-parameter. This script clears them because the service-facade
-    // contract (task brief critical intent #2) is "errors via out-parameters, not thrown" — and
-    // ServiceCallSyncImpl#callSingle refuses to even run a *subsequent* service call while
-    // ec.message.hasError() is still true (it bails out before the script runs at all). Leaving
-    // stale errors on a shared ExecutionContext (e.g. an automation runner processing several
-    // DatabaseSourceQuery rows in one execution, or this component's own smoke-test suite sharing
-    // one ec across @Test methods) would silently block unrelated later extractions. Clearing here
-    // keeps each extract#DatabaseRecords call independent, matching the intended out-parameter-only
-    // error contract without changing what the caller observes from THIS call.
+    // Mirror extractOmsOrders.groovy exactly: copy the accumulated ec.message errors into the
+    // `errors` out-parameter and DO NOT clear them (OMS, the proven-in-production reference, does
+    // not clear — see extractOmsOrders.groovy:40-46). The service facade rolls the transaction back
+    // on ec.message.hasError() and the caller reads failures from `errors`.
     //
-    // IMPORTANT: MessageFacadeImpl.getErrors() returns Collections.unmodifiableList(errorList) — a
-    // LIVE VIEW over the same backing list, not a copy. clearErrors() calls errorList.clear() on
-    // that same backing list, which would silently empty this out-parameter too if we kept a
-    // reference to the view instead of copying the elements first. Copy with `new ArrayList<>(...)`
-    // before clearing.
+    // The copy is deliberate: MessageFacadeImpl.getErrors() returns Collections.unmodifiableList(
+    // errorList) — a LIVE VIEW over the backing list, not a snapshot. new ArrayList<>(...) captures
+    // an independent copy so the out-parameter is stable even if the shared MessageFacade is later
+    // mutated (e.g. cleared by the caller between calls).
     errors = new ArrayList<String>(ec.message.getErrors())
-    ec.message.clearErrors()
     warnings = []
     dataAvailable = false
     recordCount = 0
