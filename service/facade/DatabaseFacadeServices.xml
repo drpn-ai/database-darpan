@@ -47,4 +47,44 @@
             <parameter name="checks" type="List"><parameter name="check" type="Map"/></parameter>
         </out-parameters>
     </service>
+
+    <service verb="save" noun="DatabaseSourceConfig" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/saveDatabaseSourceConfig.groovy">
+        <description>Create or update a database connection config for the active tenant. Tenant-admin only:
+            the facade artifact group is a pattern group, so the role gate must live in the script.</description>
+        <in-parameters>
+            <parameter name="databaseSourceConfigId"/>
+            <parameter name="description"/>
+            <parameter name="dialect" default-value="MYSQL"/>
+            <parameter name="host" required="true"/>
+            <parameter name="port" type="Integer"/>
+            <parameter name="databaseName" required="true"/>
+            <parameter name="username" required="true"/>
+            <parameter name="password"/>
+            <parameter name="requireTls" default-value="Y"/>
+            <parameter name="caCertPem"/>
+            <parameter name="connectTimeoutSeconds" type="Integer" default-value="10"/>
+            <parameter name="queryTimeoutSeconds" type="Integer" default-value="300"/>
+            <parameter name="maxRows" type="Integer" default-value="500000"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="ok" type="Boolean"/>
+            <parameter name="databaseSourceConfigId"/>
+        </out-parameters>
+    </service>
+
+    <service verb="list" noun="DatabaseSourceConfigs" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/listDatabaseSourceConfigs.groovy">
+        <description>Database connection configs visible in the active tenant. Credentials are never returned.</description>
+        <out-parameters>
+            <parameter name="configs" type="List"><parameter name="config" type="Map"/></parameter>
+        </out-parameters>
+    </service>
+
+    <service verb="delete" noun="DatabaseSourceConfig" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/deleteDatabaseSourceConfig.groovy">
+        <description>Delete a database connection config. Tenant-admin only. Refuses while queries reference it.</description>
+        <in-parameters><parameter name="databaseSourceConfigId" required="true"/></in-parameters>
+        <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
+    </service>
 </services>
