@@ -87,4 +87,37 @@
         <in-parameters><parameter name="databaseSourceConfigId" required="true"/></in-parameters>
         <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
     </service>
+
+    <service verb="save" noun="DatabaseSourceQuery" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/saveDatabaseSourceQuery.groovy">
+        <description>Create or update a SELECT for a database source config. Tenant-admin only.
+            The statement is validated before it is persisted, so an unvalidated statement can never
+            reach the extractor.</description>
+        <in-parameters>
+            <parameter name="databaseSourceQueryId"/>
+            <parameter name="databaseSourceConfigId" required="true"/>
+            <parameter name="description"/>
+            <parameter name="sqlSelect" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="ok" type="Boolean"/>
+            <parameter name="databaseSourceQueryId"/>
+        </out-parameters>
+    </service>
+
+    <service verb="list" noun="DatabaseSourceQueries" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/listDatabaseSourceQueries.groovy">
+        <description>Saved queries in the active tenant, optionally filtered to one config.</description>
+        <in-parameters><parameter name="databaseSourceConfigId"/></in-parameters>
+        <out-parameters>
+            <parameter name="queries" type="List"><parameter name="query" type="Map"/></parameter>
+        </out-parameters>
+    </service>
+
+    <service verb="delete" noun="DatabaseSourceQuery" type="script" allow-remote="true" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/deleteDatabaseSourceQuery.groovy">
+        <description>Delete a saved query. Tenant-admin only.</description>
+        <in-parameters><parameter name="databaseSourceQueryId" required="true"/></in-parameters>
+        <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
+    </service>
 </services>
