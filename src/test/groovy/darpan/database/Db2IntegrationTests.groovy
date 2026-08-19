@@ -1,5 +1,7 @@
 package darpan.database
 
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 
@@ -13,6 +15,18 @@ import static org.junit.jupiter.api.Assertions.*
  *  Db2 database names are limited to 8 characters, hence RECONTST. */
 @EnabledIfEnvironmentVariable(named = "DARPAN_DB2_TEST_HOST", matches = ".+")
 class Db2IntegrationTests {
+
+    /**
+     * These suites deliberately target a disposable loopback container, which the JdbcUrlSupport host
+     * guard rejects by default. Declare that intent here rather than weakening the guard: production
+     * still refuses non-routable addresses because MoquiProductionConf.xml never sets this property.
+     */
+    @BeforeAll static void allowLoopbackForDisposableContainer() {
+        System.setProperty("database_source_allow_private_hosts", "true")
+    }
+    @AfterAll static void restoreHostPolicy() {
+        System.clearProperty("database_source_allow_private_hosts")
+    }
     private static Map config() {
         [dialect: "DB2", host: System.getenv("DARPAN_DB2_TEST_HOST"),
          port: (System.getenv("DARPAN_DB2_TEST_PORT") ?: "50000") as long,

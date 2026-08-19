@@ -14,9 +14,8 @@ if (!tenantId) { ec.message.addError("No active tenant."); return }
 
 // Validate the address at save time so a blocked host is rejected here rather than surfacing later
 // as a confusing extraction failure on a scheduled run.
-boolean allowPrivateHosts = "true".equalsIgnoreCase(System.getProperty("database_source_allow_private_hosts") ?: "false")
 try {
-    JdbcUrlSupport.buildUrl([dialect: dialect, host: host, databaseName: databaseName, port: port], allowPrivateHosts)
+    JdbcUrlSupport.buildUrl([dialect: dialect, host: host, databaseName: databaseName, port: port])
 } catch (IllegalArgumentException e) {
     ec.message.addError(e.message); return
 }

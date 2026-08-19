@@ -19,11 +19,10 @@ TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
 
 if (!ec.message.hasError() && configRow != null) {
     Map config = configRow.getMap()
-    boolean allowPrivateHosts = "true".equalsIgnoreCase(System.getProperty("database_source_allow_private_hosts") ?: "false")
-
+    
     String url = null
     try {
-        url = JdbcUrlSupport.buildUrl(config, allowPrivateHosts)
+        url = JdbcUrlSupport.buildUrl(config)
         checks << [name: "Address", status: "PASS", detail: url]
     } catch (IllegalArgumentException e) {
         checks << [name: "Address", status: "FAIL", detail: e.message]

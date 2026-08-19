@@ -55,7 +55,16 @@ class JdbcUrlSupport {
         }
     }
 
-    static String buildUrl(Map config, boolean allowPrivateHosts = false) {
+    /**
+     * The deployment's private-host policy, in ONE place. Callers used to each re-read this property,
+     * which meant a caller that forgot silently got the wrong default - and the env-gated integration
+     * tests, which deliberately target loopback containers, called buildUrl(config) and were rejected.
+     */
+    static boolean privateHostsAllowed() {
+        return "true".equalsIgnoreCase(System.getProperty("database_source_allow_private_hosts") ?: "false")
+    }
+
+    static String buildUrl(Map config, boolean allowPrivateHosts = privateHostsAllowed()) {
         Map d = DIALECTS[dialectOf(config)]
         String host = requireMatch(config.host?.toString()?.trim(), HOST_PATTERN, "host")
         String db = requireMatch(config.databaseName?.toString()?.trim(), DB_PATTERN, "databaseName")

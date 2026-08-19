@@ -1,5 +1,7 @@
 package darpan.database
 
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 
@@ -13,6 +15,18 @@ import static org.junit.jupiter.api.Assertions.*
  */
 @EnabledIfEnvironmentVariable(named = "DARPAN_MYSQL_TEST_HOST", matches = ".+")
 class MySqlIntegrationTests {
+
+    /**
+     * These suites deliberately target a disposable loopback container, which the JdbcUrlSupport host
+     * guard rejects by default. Declare that intent here rather than weakening the guard: production
+     * still refuses non-routable addresses because MoquiProductionConf.xml never sets this property.
+     */
+    @BeforeAll static void allowLoopbackForDisposableContainer() {
+        System.setProperty("database_source_allow_private_hosts", "true")
+    }
+    @AfterAll static void restoreHostPolicy() {
+        System.clearProperty("database_source_allow_private_hosts")
+    }
     private static Map config() {
         [host: System.getenv("DARPAN_MYSQL_TEST_HOST"), port: (System.getenv("DARPAN_MYSQL_TEST_PORT") ?: "13306") as long,
          databaseName: "recon_test", username: "root", password: System.getenv("DARPAN_MYSQL_TEST_PASSWORD") ?: "test",

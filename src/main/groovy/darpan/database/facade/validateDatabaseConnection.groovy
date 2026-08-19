@@ -23,8 +23,7 @@ if (databaseSourceConfigId) {
 
 Connection conn = null
 try {
-    boolean allowPrivateHosts = "true".equalsIgnoreCase(System.getProperty("database_source_allow_private_hosts") ?: "false")
-    conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config, allowPrivateHosts),
+    conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config),
             JdbcUrlSupport.connectionProperties(config))
     def st = conn.createStatement(); st.setQueryTimeout(10)
     st.executeQuery(JdbcUrlSupport.testQuery(JdbcUrlSupport.dialectOf(config))).close()
