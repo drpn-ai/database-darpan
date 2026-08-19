@@ -3,7 +3,13 @@ package darpan.database
 /** Server-side JDBC URL/property builder — the single home for all dialect knowledge. Raw URLs are
  * never accepted from users because URL parameters can enable dangerous driver features
  * (allowLoadLocalInfile, autoDeserialize, ...). */
+import java.net.InetAddress
+import java.net.UnknownHostException
+
 class JdbcUrlSupport {
+
+    /** Cloud instance-metadata address. Reachable from many hosts and never a legitimate DB. */
+    private static final String METADATA_ADDRESS = "169.254.169.254"
     private static final def HOST_PATTERN = ~/^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/
     private static final def DB_PATTERN = ~/^[A-Za-z0-9_$-]+$/
     private static final Map<String, Map> DIALECTS = [
@@ -26,12 +32,38 @@ class JdbcUrlSupport {
         return d
     }
 
-    static String buildUrl(Map config) {
+    /**
+     * Reject hosts that resolve to non-routable space. Without this, a tenant-supplied host turns
+     * the Darpan server into an internal port scanner: connect latency and error text alone reveal
+     * what is listening. Fails CLOSED on an unresolvable host — an unknown host is not a safe host.
+     */
+    static void assertHostAllowed(String host, boolean allowPrivateHosts) {
+        if (allowPrivateHosts) return
+        InetAddress[] resolved
+        try {
+            resolved = InetAddress.getAllByName(host)
+        } catch (UnknownHostException ignored) {
+            throw new IllegalArgumentException("Cannot resolve host '${host}'.")
+        }
+        for (InetAddress address : resolved) {
+            if (address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                    || address.isAnyLocalAddress() || address.isMulticastAddress()
+                    || METADATA_ADDRESS == address.hostAddress) {
+                throw new IllegalArgumentException("Host '${host}' resolves to a non-routable or internal " +
+                        "address (${address.hostAddress}) and cannot be used as a database source.")
+            }
+        }
+    }
+
+    static String buildUrl(Map config, boolean allowPrivateHosts = false) {
         Map d = DIALECTS[dialectOf(config)]
         String host = requireMatch(config.host?.toString()?.trim(), HOST_PATTERN, "host")
         String db = requireMatch(config.databaseName?.toString()?.trim(), DB_PATTERN, "databaseName")
         long port = (config.port ?: d.defaultPort) as long
         if (port < 1 || port > 65535) throw new IllegalArgumentException("port out of range: ${port}")
+        // DNS resolution is deliberately LAST: every cheap syntactic check runs first, so a malformed
+        // databaseName or port fails for its own reason instead of being masked by a lookup failure.
+        assertHostAllowed(host, allowPrivateHosts)
         return "${d.prefix}${host}:${port}/${db}"
     }
 

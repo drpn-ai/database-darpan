@@ -11,14 +11,14 @@ class JdbcUrlSupportTests {
     }
 
     @Test void buildsCanonicalUrlsPerDialect() {
-        assertEquals("jdbc:mysql://db.example.internal:3306/orders", JdbcUrlSupport.buildUrl(base("MYSQL")))
-        assertEquals("jdbc:postgresql://db.example.internal:5432/orders", JdbcUrlSupport.buildUrl(base("POSTGRES")))
-        assertEquals("jdbc:db2://db.example.internal:50000/orders", JdbcUrlSupport.buildUrl(base("DB2")))
-        assertEquals("jdbc:mysql://db.example.internal:3306/orders", JdbcUrlSupport.buildUrl(base(null)))   // null dialect defaults to MYSQL
+        assertEquals("jdbc:mysql://db.example.internal:3306/orders", JdbcUrlSupport.buildUrl(base("MYSQL"), true))
+        assertEquals("jdbc:postgresql://db.example.internal:5432/orders", JdbcUrlSupport.buildUrl(base("POSTGRES"), true))
+        assertEquals("jdbc:db2://db.example.internal:50000/orders", JdbcUrlSupport.buildUrl(base("DB2"), true))
+        assertEquals("jdbc:mysql://db.example.internal:3306/orders", JdbcUrlSupport.buildUrl(base(null), true))   // null dialect defaults to MYSQL
     }
     @Test void explicitPortOverridesDialectDefault() {
         assertEquals("jdbc:postgresql://db.example.internal:15432/orders",
-                JdbcUrlSupport.buildUrl(base("POSTGRES") + [port: 15432L]))
+                JdbcUrlSupport.buildUrl(base("POSTGRES") + [port: 15432L], true))
     }
     @Test void rejectsUnknownDialect() {
         assertThrows(IllegalArgumentException) { JdbcUrlSupport.buildUrl(base("ORACLE")) }
@@ -79,5 +79,41 @@ class JdbcUrlSupportTests {
     }
     @Test void rejectsOutOfRangePort() {
         assertThrows(IllegalArgumentException) { JdbcUrlSupport.buildUrl(base() + [port: 70000L]) }
+    }
+
+    // ── host guard (2026-08-19) ───────────────────────────────────────────────
+    // Without this, a tenant-supplied host turns the Darpan server into an internal port
+    // scanner: connect latency and error text alone reveal what is listening.
+
+    @Test void rejectsLoopbackHost() {
+        def e = assertThrows(IllegalArgumentException) { JdbcUrlSupport.assertHostAllowed("localhost", false) }
+        assertTrue(e.message.contains("non-routable"))
+    }
+
+    @Test void rejectsRfc1918Host() {
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.assertHostAllowed("10.0.0.5", false) }
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.assertHostAllowed("192.168.1.1", false) }
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.assertHostAllowed("172.16.0.1", false) }
+    }
+
+    @Test void rejectsCloudMetadataAddress() {
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.assertHostAllowed("169.254.169.254", false) }
+    }
+
+    @Test void allowsPrivateHostWhenOverrideEnabled() {
+        JdbcUrlSupport.assertHostAllowed("127.0.0.1", true)   // must not throw
+    }
+
+    @Test void unresolvableHostIsRejectedNotSilentlyAllowed() {
+        def e = assertThrows(IllegalArgumentException) {
+            JdbcUrlSupport.assertHostAllowed("no-such-host.invalid", false)
+        }
+        assertTrue(e.message.contains("Cannot resolve"))
+    }
+
+    @Test void buildUrlAppliesTheHostGuard() {
+        Map cfg = base("MYSQL"); cfg.host = "127.0.0.1"
+        assertThrows(IllegalArgumentException) { JdbcUrlSupport.buildUrl(cfg, false) }
+        assertEquals("jdbc:mysql://127.0.0.1:3306/orders", JdbcUrlSupport.buildUrl(cfg, true))
     }
 }

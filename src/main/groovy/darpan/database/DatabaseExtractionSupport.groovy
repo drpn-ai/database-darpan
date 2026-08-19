@@ -83,7 +83,9 @@ class DatabaseExtractionSupport {
      * (previewDatabaseQuery.groovy) so both read paths are equally hardened — neither may open a raw
      * DriverManager connection and skip a step of this fence. */
     static Connection openReadOnlyConnection(Map config) {
-        Connection conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config), JdbcUrlSupport.connectionProperties(config))
+        boolean allowPrivateHosts = "true".equalsIgnoreCase(System.getProperty("database_source_allow_private_hosts") ?: "false")
+        Connection conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config, allowPrivateHosts),
+                JdbcUrlSupport.connectionProperties(config))
         conn.setReadOnly(true)
         conn.setAutoCommit(false)
         for (String stmtSql : JdbcUrlSupport.readOnlySessionStatements(JdbcUrlSupport.dialectOf(config))) {
