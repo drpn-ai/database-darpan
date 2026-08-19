@@ -30,4 +30,21 @@
             <parameter name="error"/>
         </out-parameters>
     </service>
+
+    <service verb="probe" noun="DatabaseConnection" type="script" transaction="ignore"
+             allow-remote="false" authenticate="true"
+             location="component://database-darpan/src/main/groovy/darpan/database/facade/probeDatabaseConnection.groovy">
+        <description>Connection diagnostics for a saved database source config. Registered on the
+            SourceSystemConnector DATABASE row as healthCheckServiceName and invoked only through
+            facade.SettingsFacadeServices.test#SourceConnection, which owns the permission gate.
+            Read-only, one connection, no retries. Never writes to ec.message: a rejected credential
+            is a check row, not a service error.</description>
+        <in-parameters>
+            <parameter name="databaseSourceConfigId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="ok" type="Boolean"/>
+            <parameter name="checks" type="List"><parameter name="check" type="Map"/></parameter>
+        </out-parameters>
+    </service>
 </services>
