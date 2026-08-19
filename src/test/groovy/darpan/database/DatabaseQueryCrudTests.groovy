@@ -44,4 +44,21 @@ class DatabaseQueryCrudTests {
         assertTrue(SqlSelectValidator.validate(
                 "SELECT order_id FROM order_header WHERE entry_date >= :windowStart AND entry_date < :windowEnd").isEmpty())
     }
+
+    @Test void sqlSelectParametersAllowAngleBrackets() {
+        // Moqui's HTML filter rejects < and > in string parameters. The canonical windowed query
+        // (entry_date >= :windowStart AND entry_date < :windowEnd) is therefore unsaveable without
+        // allow-html="any" - found by the live CHELAN run, invisible to validator-level unit tests
+        // because it fails in the service layer before the script ever executes.
+        String x = facadeXml()
+        for (String marker : ['verb="save" noun="DatabaseSourceQuery"', 'verb="preview" noun="DatabaseQuery"']) {
+            int start = x.indexOf(marker)
+            assertTrue(start >= 0, "missing service: ${marker}")
+            String block = x.substring(start, x.indexOf('</service>', start))
+            int p = block.indexOf('name="sqlSelect"')
+            assertTrue(p >= 0, "no sqlSelect parameter in ${marker}")
+            assertTrue(block.substring(p, block.indexOf('/>', p)).contains('allow-html="any"'),
+                    "sqlSelect must accept angle brackets in ${marker}")
+        }
+    }
 }

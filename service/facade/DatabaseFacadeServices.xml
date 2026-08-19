@@ -21,7 +21,11 @@
         <description>Validates and runs a SELECT capped at 10 rows for the query editor preview.</description>
         <in-parameters>
             <parameter name="databaseSourceQueryId"/>
-            <parameter name="databaseSourceConfigId"/><parameter name="sqlSelect"/>
+            <parameter name="databaseSourceConfigId"/>
+            <!-- allow-html="any": a SELECT legitimately contains < and >= . Moqui's HTML filter is an
+                 XSS guard for rendered output and has no bearing here; SqlSelectValidator plus the
+                 read-only fence are what actually constrain this field. -->
+            <parameter name="sqlSelect" allow-html="any"/>
             <parameter name="windowStart" type="Timestamp"/><parameter name="windowEnd" type="Timestamp"/>
         </in-parameters>
         <out-parameters>
@@ -97,7 +101,9 @@
             <parameter name="databaseSourceQueryId"/>
             <parameter name="databaseSourceConfigId" required="true"/>
             <parameter name="description"/>
-            <parameter name="sqlSelect" required="true"/>
+            <!-- allow-html="any": see preview#DatabaseQuery. Without it, the canonical windowed
+                 query (entry_date >= :windowStart AND entry_date < :windowEnd) cannot be saved. -->
+            <parameter name="sqlSelect" required="true" allow-html="any"/>
         </in-parameters>
         <out-parameters>
             <parameter name="ok" type="Boolean"/>
