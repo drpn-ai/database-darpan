@@ -16,7 +16,7 @@
             <parameter name="error"/>
         </out-parameters>
     </service>
-    <service verb="preview" noun="DatabaseQuery" type="script" transaction="ignore" authenticate="true"
+    <service verb="preview" noun="DatabaseQuery" type="script" transaction="ignore" allow-remote="true" authenticate="true"
             location="component://database-darpan/src/main/groovy/darpan/database/facade/previewDatabaseQuery.groovy">
         <description>Validates and runs a SELECT capped at 10 rows for the query editor preview.</description>
         <in-parameters>
