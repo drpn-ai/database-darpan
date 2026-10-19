@@ -77,19 +77,54 @@
         </out-parameters>
     </service>
 
-    <service verb="list" noun="DatabaseSourceConfigs" type="script" allow-remote="true" authenticate="true"
-             location="component://database-darpan/src/main/groovy/darpan/database/facade/listDatabaseSourceConfigs.groovy">
+    <service verb="list" noun="DatabaseSourceConfigs" allow-remote="true" authenticate="true">
         <description>Database connection configs visible in the active tenant. Credentials are never returned.</description>
         <out-parameters>
             <parameter name="configs" type="List"><parameter name="config" type="Map"/></parameter>
         </out-parameters>
+        <actions>
+            <!-- Tenant scope is the explicit condition below, so it holds whatever the caller's authz posture;
+                 on an authz-enabled facade call the DARPAN_ACTIVE_COMPANY_SCOPE filter applies the same scope
+                 again (DAR-BE-076). Not a primary-key lookup, so the condition is never dropped. -->
+            <set field="tenantId" from="darpan.facade.common.TenantAccessSupport.currentActiveTenantUserGroupId(ec)"/>
+            <set field="configs" from="[]"/>
+            <if condition="tenantId">
+                <entity-find entity-name="darpan.database.DatabaseSourceConfig" list="configRows" cache="false">
+                    <econdition field-name="companyUserGroupId" from="tenantId"/>
+                </entity-find>
+                <!-- Explicit allowlist rather than the whole row: the credential must never leave the server,
+                     and an allowlist stays correct when new columns are added to the entity. -->
+                <set field="configs" from="configRows.collect { row -> [databaseSourceConfigId: row.databaseSourceConfigId, description: row.description,
+                        dialect: row.dialect, host: row.host, port: row.port, databaseName: row.databaseName, username: row.username,
+                        requireTls: row.requireTls, isActive: row.isActive] }"/>
+            </if>
+        </actions>
     </service>
 
-    <service verb="delete" noun="DatabaseSourceConfig" type="script" allow-remote="true" authenticate="true"
-             location="component://database-darpan/src/main/groovy/darpan/database/facade/deleteDatabaseSourceConfig.groovy">
+    <service verb="delete" noun="DatabaseSourceConfig" allow-remote="true" authenticate="true">
         <description>Delete a database connection config. Tenant-admin only. Refuses while queries reference it.</description>
         <in-parameters><parameter name="databaseSourceConfigId" required="true"/></in-parameters>
         <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
+        <actions>
+            <set field="ok" from="false"/>
+            <if condition="!darpan.facade.common.TenantAccessSupport.canEditActiveTenantData(ec)">
+                <message error="true">You do not have permission to change database sources in this tenant.</message>
+                <return/>
+            </if>
+            <!-- Read past the tenant filter on purpose, then gate in code: a foreign row must get the
+                 "not available in your active tenant" answer, not a filtered-away "not found". -->
+            <set field="existing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceConfig', 'delete#DatabaseSourceConfig existence check; requireTenantRecordAccess gates it on the next line').condition('databaseSourceConfigId', databaseSourceConfigId).useCache(false).one()"/>
+            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source config ${databaseSourceConfigId} not found.&quot;, &quot;Database source config ${databaseSourceConfigId} is not available in your active tenant.&quot;)"/>
+            <if condition="ec.message.hasError()"><return/></if>
+            <!-- Every referencing query counts, whatever its stamp: deleting the connection orphans them all. -->
+            <set field="referencing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceQuery', 'delete#DatabaseSourceConfig orphan guard counts every query on a config the caller was just gated for').condition('databaseSourceConfigId', databaseSourceConfigId).count()"/>
+            <if condition="referencing &gt; 0">
+                <message error="true">Cannot delete: ${referencing} saved quer${referencing == 1 ? 'y' : 'ies'} still use this connection.</message>
+                <return/>
+            </if>
+            <service-call name="delete#darpan.database.DatabaseSourceConfig" in-map="[databaseSourceConfigId: databaseSourceConfigId]"/>
+            <set field="ok" from="!ec.message.hasError()"/>
+        </actions>
     </service>
 
     <service verb="save" noun="DatabaseSourceQuery" type="script" allow-remote="true" authenticate="true"
@@ -111,19 +146,44 @@
         </out-parameters>
     </service>
 
-    <service verb="list" noun="DatabaseSourceQueries" type="script" allow-remote="true" authenticate="true"
-             location="component://database-darpan/src/main/groovy/darpan/database/facade/listDatabaseSourceQueries.groovy">
+    <service verb="list" noun="DatabaseSourceQueries" allow-remote="true" authenticate="true">
         <description>Saved queries in the active tenant, optionally filtered to one config.</description>
         <in-parameters><parameter name="databaseSourceConfigId"/></in-parameters>
         <out-parameters>
             <parameter name="queries" type="List"><parameter name="query" type="Map"/></parameter>
         </out-parameters>
+        <actions>
+            <!-- See list#DatabaseSourceConfigs: explicit tenant condition, plus the entity filter on a facade call. -->
+            <set field="tenantId" from="darpan.facade.common.TenantAccessSupport.currentActiveTenantUserGroupId(ec)"/>
+            <set field="queries" from="[]"/>
+            <if condition="tenantId">
+                <entity-find entity-name="darpan.database.DatabaseSourceQuery" list="queryRows" cache="false">
+                    <econdition field-name="companyUserGroupId" from="tenantId"/>
+                    <econdition field-name="databaseSourceConfigId" ignore-if-empty="true"/>
+                </entity-find>
+                <set field="queries" from="queryRows.collect { row -> [databaseSourceQueryId: row.databaseSourceQueryId,
+                        databaseSourceConfigId: row.databaseSourceConfigId, description: row.description,
+                        sqlSelect: row.sqlSelect, isActive: row.isActive] }"/>
+            </if>
+        </actions>
     </service>
 
-    <service verb="delete" noun="DatabaseSourceQuery" type="script" allow-remote="true" authenticate="true"
-             location="component://database-darpan/src/main/groovy/darpan/database/facade/deleteDatabaseSourceQuery.groovy">
+    <service verb="delete" noun="DatabaseSourceQuery" allow-remote="true" authenticate="true">
         <description>Delete a saved query. Tenant-admin only.</description>
         <in-parameters><parameter name="databaseSourceQueryId" required="true"/></in-parameters>
         <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
+        <actions>
+            <set field="ok" from="false"/>
+            <if condition="!darpan.facade.common.TenantAccessSupport.canEditActiveTenantData(ec)">
+                <message error="true">You do not have permission to change database sources in this tenant.</message>
+                <return/>
+            </if>
+            <!-- See delete#DatabaseSourceConfig: read past the filter, then gate in code. -->
+            <set field="existing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceQuery', 'delete#DatabaseSourceQuery existence check; requireTenantRecordAccess gates it on the next line').condition('databaseSourceQueryId', databaseSourceQueryId).useCache(false).one()"/>
+            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source query ${databaseSourceQueryId} not found.&quot;, &quot;Database source query ${databaseSourceQueryId} is not available in your active tenant.&quot;)"/>
+            <if condition="ec.message.hasError()"><return/></if>
+            <service-call name="delete#darpan.database.DatabaseSourceQuery" in-map="[databaseSourceQueryId: databaseSourceQueryId]"/>
+            <set field="ok" from="!ec.message.hasError()"/>
+        </actions>
     </service>
 </services>

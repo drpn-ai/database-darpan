@@ -12,6 +12,13 @@ class DatabaseConfigCrudTests {
 
     private static String facadeXml() { new File('service/facade/DatabaseFacadeServices.xml').text }
     private static File script(String n) { new File("src/main/groovy/darpan/database/facade/${n}.groovy") }
+    /** One service's block; list# and delete# are XML actions in the facade file (DAR-BE-074). */
+    private static String serviceBlock(String verb, String noun) {
+        String x = facadeXml()
+        int start = x.indexOf("verb=\"${verb}\" noun=\"${noun}\"")
+        assertTrue(start >= 0, "missing service ${verb}#${noun}")
+        return x.substring(start, x.indexOf('</service>', start))
+    }
 
     @Test void crudServicesAreDeclared() {
         String x = facadeXml()
@@ -28,8 +35,8 @@ class DatabaseConfigCrudTests {
                 'list must not return the stored credential')
     }
 
-    @Test void listScriptBuildsAnExplicitFieldAllowlistNotGetMap() {
-        String g = script('listDatabaseSourceConfigs').text
+    @Test void listBuildsAnExplicitFieldAllowlistNotGetMap() {
+        String g = serviceBlock('list', 'DatabaseSourceConfigs')
         assertFalse(g.contains('.getMap()'),
                 'an allowlist stays correct when new columns are added; getMap() would leak them')
         assertFalse(g.contains('password'), 'password must never leave the server')
@@ -38,7 +45,7 @@ class DatabaseConfigCrudTests {
     @Test void writeServicesGateOnTenantEditPermission() {
         assertTrue(script('saveDatabaseSourceConfig').text.contains('canEditActiveTenantData'),
                 'save must be tenant-admin gated')
-        assertTrue(script('deleteDatabaseSourceConfig').text.contains('canEditActiveTenantData'),
+        assertTrue(serviceBlock('delete', 'DatabaseSourceConfig').contains('canEditActiveTenantData'),
                 'delete must be tenant-admin gated')
     }
 
@@ -48,7 +55,7 @@ class DatabaseConfigCrudTests {
     }
 
     @Test void deleteRefusesWhileQueriesStillReferenceTheConfig() {
-        assertTrue(script('deleteDatabaseSourceConfig').text.contains('DatabaseSourceQuery'),
+        assertTrue(serviceBlock('delete', 'DatabaseSourceConfig').contains('DatabaseSourceQuery'),
                 'deleting a config out from under its queries would orphan them')
     }
 }

@@ -29,7 +29,9 @@ class DatabaseQueryCrudTests {
 
     @Test void writeServicesGateOnTenantEditPermission() {
         assertTrue(script('saveDatabaseSourceQuery').text.contains('canEditActiveTenantData'))
-        assertTrue(script('deleteDatabaseSourceQuery').text.contains('canEditActiveTenantData'))
+        String x = facadeXml()
+        int start = x.indexOf('verb="delete" noun="DatabaseSourceQuery"')
+        assertTrue(x.substring(start, x.indexOf('</service>', start)).contains('canEditActiveTenantData'))
     }
 
     @Test void validatorRejectsNonSelectAndUnknownPlaceholders() {
