@@ -164,7 +164,7 @@ class DatabaseSourceListDeleteServiceTests {
         ["DBLD_Q_G", "DBLD_Q_N"].each { String id ->
             Map out = production { invoke("facade.DatabaseFacadeServices.delete#DatabaseSourceQuery", [databaseSourceQueryId: id]) }
             assertEquals(false, out.ok, "${id} must not be deletable from KREWE")
-            assertEquals(["Database source query ${id} is not available in your active tenant.".toString()], ec.message.errors)
+            assertEquals(["Database source query ${id} not found.".toString()], ec.message.errors)
             assertNotNull(queryRow(id), "${id} must survive")
             ec.message.clearErrors()
         }
@@ -220,7 +220,7 @@ class DatabaseSourceListDeleteServiceTests {
         ["DBLD_CONF_G", "DBLD_CONF_N"].each { String id ->
             Map out = production { invoke("facade.DatabaseFacadeServices.delete#DatabaseSourceConfig", [databaseSourceConfigId: id]) }
             assertEquals(false, out.ok)
-            assertEquals(["Database source config ${id} is not available in your active tenant.".toString()], ec.message.errors)
+            assertEquals(["Database source config ${id} not found.".toString()], ec.message.errors)
             assertNotNull(configRow(id))
             ec.message.clearErrors()
         }

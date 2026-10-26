@@ -39,7 +39,7 @@ The remote facade methods are not yet listed in `darpan/docs/api-contract` becau
 ## Access rules
 
 - Writes need tenant edit rights in the active tenant (`TenantAccessSupport.canEditActiveTenantData`).
-- Reads by id go through `TenantAccessSupport.requireTenantRecordAccess`. A row from another tenant gets "not available in your active tenant".
+- Reads by id go through `TenantAccessSupport.requireTenantRecordAccess`. A row from another tenant gets the same "not found" as a missing one, so the answer never says which (DAR-BE-135).
 - A query and its connection must belong to the same tenant. A blank tenant on either side fails closed.
 - When an automation runs the extract, the query must belong to the automation's tenant.
 

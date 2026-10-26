@@ -17,16 +17,13 @@ def queryRow = ec.entity.find("darpan.database.DatabaseSourceQuery")
         .disableAuthz().useCache(false).one()
 
 if (companyUserGroupIdValue) {
-    if (!queryRow) {
+    if (queryRow?.companyUserGroupId?.toString()?.trim() != companyUserGroupIdValue) {
         ec.message.addError("Database source query ${queryIdValue} not found.")
-    } else if (queryRow.companyUserGroupId?.toString()?.trim() != companyUserGroupIdValue) {
-        ec.message.addError("Database source query ${queryIdValue} is not available in this automation tenant.")
     }
 } else {
     TenantAccessSupport.requireTenantRecordAccess(
             ec, queryRow,
-            "Database source query ${queryIdValue} not found.",
-            "Database source query ${queryIdValue} is not available in your active tenant.")
+            "Database source query ${queryIdValue} not found.")
 }
 
 def configRow = null

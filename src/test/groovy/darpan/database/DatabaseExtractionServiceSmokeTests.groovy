@@ -139,7 +139,8 @@ class DatabaseExtractionServiceSmokeTests {
                              windowEnd: Timestamp.valueOf("2026-07-02 00:00:00")])
                 .disableAuthz().call()
         assertEquals(false, out.dataAvailable)
-        assertTrue((out.errors as List).join(" ").toLowerCase().contains("tenant"))
+        // DAR-BE-135: another tenant's query reads exactly as a missing one.
+        assertEquals(["Database source query SMOKE_QUERY not found."], out.errors)
     }
 
     @Test
@@ -169,8 +170,8 @@ class DatabaseExtractionServiceSmokeTests {
                 .disableAuthz().call()
         assertEquals(false, out.dataAvailable)
         assertNull(out.fileLocation)
-        assertTrue((out.errors as List).join(" ").toLowerCase().contains("active tenant"),
-                "expected active-tenant rejection, got: ${out.errors}")
+        assertEquals(["Database source query SMOKE_QUERY not found."], out.errors,
+                "another tenant's query must read exactly as a missing one (DAR-BE-135)")
     }
 
     @Test

@@ -14,8 +14,7 @@ boolean ok = false
 def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
         .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
 TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
-        "Database source config ${databaseSourceConfigId} not found.",
-        "Database source config ${databaseSourceConfigId} is not available in your active tenant.")
+        "Database source config ${databaseSourceConfigId} not found.")
 
 if (!ec.message.hasError() && configRow != null) {
     Map config = configRow.getMap()

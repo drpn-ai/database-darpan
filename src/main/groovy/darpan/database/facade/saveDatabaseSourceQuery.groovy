@@ -14,8 +14,7 @@ if (!tenantId) { ec.message.addError("No active tenant."); return }
 def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
         .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
 TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
-        "Database source config ${databaseSourceConfigId} not found.",
-        "Database source config ${databaseSourceConfigId} is not available in your active tenant.")
+        "Database source config ${databaseSourceConfigId} not found.")
 if (ec.message.hasError()) return
 
 List errors = SqlSelectValidator.validate(sqlSelect)
@@ -28,8 +27,7 @@ if (databaseSourceQueryId) {
     def existing = ec.entity.find("darpan.database.DatabaseSourceQuery")
             .condition("databaseSourceQueryId", databaseSourceQueryId).disableAuthz().useCache(false).one()
     TenantAccessSupport.requireTenantRecordAccess(ec, existing,
-            "Database source query ${databaseSourceQueryId} not found.",
-            "Database source query ${databaseSourceQueryId} is not available in your active tenant.")
+            "Database source query ${databaseSourceQueryId} not found.")
     if (ec.message.hasError()) return
     values.put("databaseSourceQueryId", databaseSourceQueryId)
     ec.service.sync().name("update#darpan.database.DatabaseSourceQuery").parameters(values).call()

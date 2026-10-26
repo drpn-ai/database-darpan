@@ -9,8 +9,7 @@ if (databaseSourceConfigId) {
     def row = ec.entity.find("darpan.database.DatabaseSourceConfig")
             .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
     TenantAccessSupport.requireTenantRecordAccess(ec, row,
-            "Database connection ${databaseSourceConfigId} not found.",
-            "Database connection ${databaseSourceConfigId} is not available in your active tenant.")
+            "Database connection ${databaseSourceConfigId} not found.")
     if (ec.message.hasError()) { ok = false; error = ec.message.getErrors().join("; "); ec.message.clearErrors(); return }
     config = new HashMap(row)
 } else {

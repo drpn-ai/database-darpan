@@ -34,8 +34,7 @@ if (databaseSourceConfigId) {
     def existing = ec.entity.find("darpan.database.DatabaseSourceConfig")
             .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
     TenantAccessSupport.requireTenantRecordAccess(ec, existing,
-            "Database source config ${databaseSourceConfigId} not found.",
-            "Database source config ${databaseSourceConfigId} is not available in your active tenant.")
+            "Database source config ${databaseSourceConfigId} not found.")
     if (ec.message.hasError()) return
     values.put("databaseSourceConfigId", databaseSourceConfigId)
     ec.service.sync().name("update#darpan.database.DatabaseSourceConfig").parameters(values).call()

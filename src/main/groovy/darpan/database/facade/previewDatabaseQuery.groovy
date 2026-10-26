@@ -11,8 +11,7 @@ if (databaseSourceQueryId) {
     def queryRow = ec.entity.find("darpan.database.DatabaseSourceQuery")
             .condition("databaseSourceQueryId", databaseSourceQueryId).disableAuthz().useCache(false).one()
     TenantAccessSupport.requireTenantRecordAccess(ec, queryRow,
-            "Database source query ${databaseSourceQueryId} not found.",
-            "Database source query ${databaseSourceQueryId} is not available in your active tenant.")
+            "Database source query ${databaseSourceQueryId} not found.")
     if (!ec.message.hasError()) {
         sql = queryRow.sqlSelect
         def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
@@ -43,8 +42,7 @@ if (databaseSourceQueryId) {
         def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
                 .condition("databaseSourceConfigId", databaseSourceConfigId).disableAuthz().useCache(false).one()
         TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
-                "Database connection ${databaseSourceConfigId} not found.",
-                "Database connection ${databaseSourceConfigId} is not available in your active tenant.")
+                "Database connection ${databaseSourceConfigId} not found.")
         if (!ec.message.hasError()) config = new HashMap(configRow)
     }
 } else {

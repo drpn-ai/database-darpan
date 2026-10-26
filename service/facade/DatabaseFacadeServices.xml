@@ -114,7 +114,7 @@
             <!-- Read past the tenant filter on purpose, then gate in code: a foreign row must get the
                  "not available in your active tenant" answer, not a filtered-away "not found". -->
             <set field="existing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceConfig', 'delete#DatabaseSourceConfig existence check; requireTenantRecordAccess gates it on the next line').condition('databaseSourceConfigId', databaseSourceConfigId).useCache(false).one()"/>
-            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source config ${databaseSourceConfigId} not found.&quot;, &quot;Database source config ${databaseSourceConfigId} is not available in your active tenant.&quot;)"/>
+            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source config ${databaseSourceConfigId} not found.&quot;)"/>
             <if condition="ec.message.hasError()"><return/></if>
             <!-- Every referencing query counts, whatever its stamp: deleting the connection orphans them all. -->
             <set field="referencing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceQuery', 'delete#DatabaseSourceConfig orphan guard counts every query on a config the caller was just gated for').condition('databaseSourceConfigId', databaseSourceConfigId).count()"/>
@@ -180,7 +180,7 @@
             </if>
             <!-- See delete#DatabaseSourceConfig: read past the filter, then gate in code. -->
             <set field="existing" from="darpan.facade.common.TenantScopedFinder.findGlobalUnscoped(ec, 'darpan.database.DatabaseSourceQuery', 'delete#DatabaseSourceQuery existence check; requireTenantRecordAccess gates it on the next line').condition('databaseSourceQueryId', databaseSourceQueryId).useCache(false).one()"/>
-            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source query ${databaseSourceQueryId} not found.&quot;, &quot;Database source query ${databaseSourceQueryId} is not available in your active tenant.&quot;)"/>
+            <set field="ignoreAccess" from="darpan.facade.common.TenantAccessSupport.requireTenantRecordAccess(ec, existing, &quot;Database source query ${databaseSourceQueryId} not found.&quot;)"/>
             <if condition="ec.message.hasError()"><return/></if>
             <service-call name="delete#darpan.database.DatabaseSourceQuery" in-map="[databaseSourceQueryId: databaseSourceQueryId]"/>
             <set field="ok" from="!ec.message.hasError()"/>
