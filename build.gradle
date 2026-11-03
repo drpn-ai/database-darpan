@@ -40,12 +40,27 @@ sourceSets {
 tasks.withType(JavaCompile) { options.compilerArgs << "-proc:none" }
 tasks.withType(GroovyCompile) { options.compilerArgs << "-proc:none" }
 
+// DAR-BE-191. IBM's Db2 driver bundles its own old, unrelocated lz4-java (net/jpountz/**). Moqui flattens every
+// component's lib/ into one WEB-INF/lib where jcc-*.jar sorts before lz4-java-*.jar, so the driver's copy won and
+// Spark 4.2.1 failed every shuffle (NoSuchMethodError LZ4BlockInputStream.newBuilder()). The driver ships without
+// those classes and uses the lz4-java Spark brings (same API, newer). A Zip, not a Jar task, so the driver's own
+// manifest and META-INF/services/java.sql.Driver carry over unchanged. Db2DriverLz4ShadowTests guards it.
+configurations { db2Driver { transitive = false } }
+def stripDb2DriverLz4 = tasks.register('stripDb2DriverLz4', Zip) {
+    archiveFileName = 'jcc-11.5.9.0-nolz4.jar'
+    destinationDirectory = layout.buildDirectory.dir('db2')
+    from({ zipTree(configurations.db2Driver.singleFile) }) { exclude 'net/jpountz/**' }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
 dependencies {
+    db2Driver 'com.ibm.db2:jcc:11.5.9.0'            // IBM IPLA via Maven Central; flag for license inventory
     implementation project(':framework')
     implementation project(':runtime:component:darpan')
     compileOnly 'com.mysql:mysql-connector-j:8.3.0'   // runtime copy provided by darpan/lib/mysql-connector-j-8.3.0.jar
     implementation 'org.postgresql:postgresql:42.7.4' // BSD-2; copied into lib/ by copyDependencies
-    implementation 'com.ibm.db2:jcc:11.5.9.0'         // IBM IPLA via Maven Central; copied into lib/; flag for license inventory
+    implementation files(stripDb2DriverLz4)            // the driver minus net/jpountz/**; copied into lib/ (DAR-BE-191)
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
     testImplementation project(':runtime:component:darpan').sourceSets.test.output
