@@ -81,6 +81,7 @@ class JdbcUrlSupport {
         boolean tls = "Y".equalsIgnoreCase(config.requireTls?.toString() ?: "Y")
         long connectSeconds = (config.connectTimeoutSeconds ?: 10L) as long
         long socketSeconds = (config.queryTimeoutSeconds ?: 300L) as long
+        Map<String, String> trust = tls ? TlsTrustSupport.trustFiles(config.caCertPem?.toString()) : null
         Properties p = new Properties()
         p.setProperty("user", config.username?.toString() ?: "")
         p.setProperty("password", config.password?.toString() ?: "")
@@ -90,18 +91,29 @@ class JdbcUrlSupport {
                 p.setProperty("allowUrlInLocalInfile", "false")
                 p.setProperty("allowMultiQueries", "false")
                 p.setProperty("useCursorFetch", "true")
-                p.setProperty("sslMode", tls ? "REQUIRED" : "PREFERRED")
+                // DAR-BE-082: TLS required means the server proves who it is (CA chain and hostname), not only encryption.
+                p.setProperty("sslMode", tls ? "VERIFY_IDENTITY" : "PREFERRED")
+                if (tls) {
+                    p.setProperty("trustCertificateKeyStoreUrl", "file:" + trust.p12Path)
+                    p.setProperty("trustCertificateKeyStoreType", "PKCS12")
+                    p.setProperty("trustCertificateKeyStorePassword", trust.p12Password)
+                }
                 p.setProperty("connectTimeout", String.valueOf(connectSeconds * 1000L))   // Connector/J: ms
                 p.setProperty("socketTimeout", String.valueOf(socketSeconds * 1000L))
                 break
             case "POSTGRES":
-                p.setProperty("sslmode", tls ? "require" : "prefer")
+                p.setProperty("sslmode", tls ? "verify-full" : "prefer")
+                if (tls) p.setProperty("sslrootcert", trust.pemPath)
                 p.setProperty("connectTimeout", String.valueOf(connectSeconds))           // pgjdbc: seconds
                 p.setProperty("socketTimeout", String.valueOf(socketSeconds))
                 p.setProperty("readOnlyMode", "always")   // pgjdbc-side read-only enforcement
                 break
             case "DB2":
                 p.setProperty("sslConnection", tls ? "true" : "false")
+                if (tls) {
+                    p.setProperty("sslCertLocation", trust.pemPath)
+                    p.setProperty("sslHostnameValidation", "BASIC")
+                }
                 p.setProperty("loginTimeout", String.valueOf(connectSeconds))             // jcc: seconds
                 break
         }

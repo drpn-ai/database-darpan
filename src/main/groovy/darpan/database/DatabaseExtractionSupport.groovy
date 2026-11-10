@@ -98,7 +98,6 @@ class DatabaseExtractionSupport {
         List warnings = []
         List<String> validation = SqlSelectValidator.validate(query.sqlSelect as String)
         if (validation) return failure(validation, warnings)
-        if (config.caCertPem) warnings << "caCertPem is configured but CA pinning is not yet enforced (encryption-required TLS mode used)."
 
         String sql = query.sqlSelect as String
         if (!sql.contains(":windowStart") && !sql.contains(":windowEnd")) {

@@ -30,14 +30,14 @@ class JdbcUrlSupportTests {
         assertEquals("false", p.getProperty("allowMultiQueries"))
         assertNull(p.getProperty("autoDeserialize"))
         assertEquals("true", p.getProperty("useCursorFetch"))
-        assertEquals("REQUIRED", p.getProperty("sslMode"))
+        assertEquals("VERIFY_IDENTITY", p.getProperty("sslMode"))
         assertEquals("10000", p.getProperty("connectTimeout"))   // Connector/J: milliseconds
         assertEquals("300000", p.getProperty("socketTimeout"))   // Connector/J: milliseconds
         assertEquals("darpan_ro", p.getProperty("user"))
     }
     @Test void postgresProperties() {
         Properties p = JdbcUrlSupport.connectionProperties(base("POSTGRES"))
-        assertEquals("require", p.getProperty("sslmode"))
+        assertEquals("verify-full", p.getProperty("sslmode"))
         assertEquals("10", p.getProperty("connectTimeout"))      // pgjdbc: SECONDS
         assertEquals("300", p.getProperty("socketTimeout"))
         assertEquals("always", p.getProperty("readOnlyMode"))
