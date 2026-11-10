@@ -1,4 +1,5 @@
 import darpan.database.JdbcUrlSupport
+import darpan.facade.common.SecretCarryOver
 import darpan.facade.common.TenantAccessSupport
 
 import java.sql.Timestamp
@@ -36,6 +37,12 @@ if (databaseSourceConfigId) {
     TenantAccessSupport.requireTenantRecordAccess(ec, existing,
             "Database source config ${databaseSourceConfigId} not found.")
     if (ec.message.hasError()) return
+    // DAR-BE-080: the stored password is reused only while the server is the same; a moved host, port or dialect with no
+    // new password would send it to whoever runs the new server (a rogue Postgres can ask for it in cleartext).
+    if (!password && existing.password) {
+        List<String> moved = SecretCarryOver.changedFields(existing, [host: host, port: port, dialect: dialect], ["host", "port", "dialect"])
+        if (moved) { ec.message.addError(SecretCarryOver.refusal(moved, "password")); return }
+    }
     values.put("databaseSourceConfigId", databaseSourceConfigId)
     ec.service.sync().name("update#darpan.database.DatabaseSourceConfig").parameters(values).call()
     ec.context.databaseSourceConfigId = databaseSourceConfigId

@@ -116,6 +116,34 @@ class DatabaseFacadeServiceSmokeTests {
     @AfterAll
     void cleanup() { ReconciliationSmokeTestSupport.cleanupMoqui(ec) }
 
+    /** DAR-BE-080: a stored password is reused only while host, port and dialect are the same. */
+    @Test
+    void movingTheDatabaseNeedsThePasswordAgain() {
+        ec.entity.makeValue("darpan.database.DatabaseSourceConfig").setAll([databaseSourceConfigId: "MOVE_CONF", companyUserGroupId: "KREWE",
+                dialect: "POSTGRES", host: "8.8.8.8", port: 5432L, databaseName: "orders", username: "u", password: "stored-secret",
+                connectTimeoutSeconds: 1L]).create()
+        Map base = [databaseSourceConfigId: "MOVE_CONF", dialect: "POSTGRES", databaseName: "orders", username: "u", connectTimeoutSeconds: 1L]
+        def save = { Map params ->
+            ec.message.clearErrors()
+            Map out = ec.service.sync().name("facade.DatabaseFacadeServices.save#DatabaseSourceConfig").parameters(base + params).disableAuthz().call()
+            [out: out, errors: new ArrayList(ec.message.errors)]
+        }
+        def stored = { ec.entity.find("darpan.database.DatabaseSourceConfig").condition("databaseSourceConfigId", "MOVE_CONF").useCache(false).one() }
+
+        Map same = save([host: "8.8.8.8", port: 5432L, description: "renamed"])
+        assertTrue(same.errors.isEmpty(), "${same.errors}")
+        assertEquals("stored-secret", stored().password, "same address keeps the stored password")
+
+        Map moved = save([host: "1.1.1.1", port: 5432L])
+        assertTrue(moved.errors.any { it.toString().startsWith("Enter the password again") }, "a moved database kept its password: ${moved.errors}")
+        assertEquals("8.8.8.8", stored().host, "the row is unchanged")
+
+        Map withSecret = save([host: "8.8.4.4", port: 5433L, password: "new-secret"])
+        assertTrue(withSecret.errors.isEmpty(), "${withSecret.errors}")
+        assertEquals(["8.8.4.4", "new-secret"], stored().with { [it.host, it.password] })
+        ec.message.clearErrors()
+    }
+
     @Test
     void validateConnectionTransientUnreachableHostReturnsOkFalseWithoutThrowing() {
         Map out = ec.service.sync().name("facade.DatabaseFacadeServices.validate#DatabaseConnection")
