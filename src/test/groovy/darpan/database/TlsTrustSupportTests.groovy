@@ -72,6 +72,18 @@ A2k6yH1VOZmWeTRRVkIvtaY9sOCR/ZqaiSoWpDUjhoCyMJEMeDyOsbj70aEMTSD/
         assertNull(JdbcUrlSupport.connectionProperties(base("POSTGRES") + [requireTls: "N"]).getProperty("sslrootcert"))
     }
 
+    /** Review of DAR-BE-082: the trust files live in an owner-only directory and a tampered file is rewritten, not trusted. */
+    @Test
+    void theTrustFilesAreOwnerOnlyAndATamperedFileIsRewritten() {
+        Map files = TlsTrustSupport.trustFiles(TEST_CA)
+        java.nio.file.Path dir = new File(files.pemPath as String).toPath().parent
+        assertFalse(dir.fileName.toString() == "darpan-db-trust", "not a fixed, guessable name in the shared temp dir")
+        assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(dir)))
+        new File(files.pemPath as String).text = "-----BEGIN CERTIFICATE-----\nplanted\n-----END CERTIFICATE-----\n"
+        Map again = TlsTrustSupport.trustFiles(TEST_CA)
+        assertEquals(["CN=Darpan Test CA"], certsIn(again.pemPath as String)*.subjectX500Principal*.name)
+    }
+
     @Test
     void aBadStoredCaIsRefusedInWords() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException) { TlsTrustSupport.trustFiles("not a certificate") }
