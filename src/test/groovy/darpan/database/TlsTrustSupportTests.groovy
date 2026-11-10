@@ -51,6 +51,13 @@ A2k6yH1VOZmWeTRRVkIvtaY9sOCR/ZqaiSoWpDUjhoCyMJEMeDyOsbj70aEMTSD/
         assertTrue(n > 50, "the JVM public roots (and the AWS RDS bundle when shipped): " + n)
     }
 
+    /** Aditi 2026-11-10: with no stored CA, AWS RDS databases are trusted through the shipped RDS bundle. */
+    @Test
+    void withNoStoredCaTheAwsRdsRootsAreTrustedToo() {
+        List<String> subjects = certsIn(TlsTrustSupport.trustFiles(null).pemPath as String)*.subjectX500Principal*.name
+        assertTrue(subjects.any { it.contains("CN=Amazon RDS us-east-2 Root CA") }, "the RDS bundle is in the trust set")
+    }
+
     @Test
     void eachDriverChecksTheServersIdentity() {
         Properties my = JdbcUrlSupport.connectionProperties(base("MYSQL") + [caCertPem: TEST_CA])
