@@ -107,7 +107,7 @@
         <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
         <actions>
             <set field="ok" from="false"/>
-            <if condition="!darpan.facade.common.TenantAccessSupport.canEditActiveTenantData(ec)">
+            <if condition="!darpan.facade.common.TenantAccessSupport.canRunActiveTenantReconciliation(ec)">
                 <message error="true">You do not have permission to change database sources in this tenant.</message>
                 <return/>
             </if>
@@ -174,7 +174,7 @@
         <out-parameters><parameter name="ok" type="Boolean"/></out-parameters>
         <actions>
             <set field="ok" from="false"/>
-            <if condition="!darpan.facade.common.TenantAccessSupport.canEditActiveTenantData(ec)">
+            <if condition="!darpan.facade.common.TenantAccessSupport.canRunActiveTenantReconciliation(ec)">
                 <message error="true">You do not have permission to change database sources in this tenant.</message>
                 <return/>
             </if>

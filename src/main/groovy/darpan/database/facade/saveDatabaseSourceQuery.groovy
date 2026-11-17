@@ -2,7 +2,7 @@ import darpan.database.SqlSelectValidator
 import darpan.facade.common.TenantAccessSupport
 
 ec.context.ok = false
-if (!TenantAccessSupport.canEditActiveTenantData(ec)) {
+if (!TenantAccessSupport.canRunActiveTenantReconciliation(ec)) {
     ec.message.addError("You do not have permission to change database sources in this tenant."); return
 }
 String tenantId = TenantAccessSupport.currentActiveTenantUserGroupId(ec)

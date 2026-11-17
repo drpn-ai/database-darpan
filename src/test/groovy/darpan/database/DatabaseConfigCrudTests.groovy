@@ -42,11 +42,16 @@ class DatabaseConfigCrudTests {
         assertFalse(g.contains('password'), 'password must never leave the server')
     }
 
-    @Test void writeServicesGateOnTenantEditPermission() {
-        assertTrue(script('saveDatabaseSourceConfig').text.contains('canEditActiveTenantData'),
-                'save must be tenant-admin gated')
-        assertTrue(serviceBlock('delete', 'DatabaseSourceConfig').contains('canEditActiveTenantData'),
-                'delete must be tenant-admin gated')
+    /** DAR-BE-292: a connection is the run tier's (tenant user, editor, tenant admin); view-only stays out. */
+    @Test void writeServicesGateOnTenantRunPermission() {
+        assertTrue(script('saveDatabaseSourceConfig').text.contains('canRunActiveTenantReconciliation'),
+                'save must be run-tier gated')
+        assertTrue(script('saveDatabaseSourceQuery').text.contains('canRunActiveTenantReconciliation'),
+                'query save must be run-tier gated')
+        assertTrue(serviceBlock('delete', 'DatabaseSourceConfig').contains('canRunActiveTenantReconciliation'),
+                'delete must be run-tier gated')
+        assertTrue(serviceBlock('delete', 'DatabaseSourceQuery').contains('canRunActiveTenantReconciliation'),
+                'query delete must be run-tier gated')
     }
 
     @Test void saveValidatesTheHostBeforePersisting() {
