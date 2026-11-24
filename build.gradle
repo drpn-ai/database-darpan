@@ -59,7 +59,7 @@ dependencies {
     implementation project(':framework')
     implementation project(':runtime:component:darpan')
     compileOnly 'com.mysql:mysql-connector-j:8.3.0'   // runtime copy provided by darpan/lib/mysql-connector-j-8.3.0.jar
-    implementation 'org.postgresql:postgresql:42.7.4' // BSD-2; copied into lib/ by copyDependencies
+    implementation 'org.postgresql:postgresql:42.7.15' // BSD-2; CVE-2026-42198, CVE-2026-54291 fixed (DAR-OPS-015); darpan ships the jar
     implementation files(stripDb2DriverLz4)            // the driver minus net/jpountz/**; copied into lib/ (DAR-BE-191)
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
