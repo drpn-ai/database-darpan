@@ -1,6 +1,7 @@
 package darpan.database
 
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 
 import java.sql.Connection
 import java.sql.DriverManager
@@ -123,6 +124,27 @@ class DatabaseExtractionSupport {
                 try { conn.close() } catch (Exception ignored) { }
             }
         }
+    }
+
+    /**
+     * DAR-BE-386: the rows whose keyField value is one of keys (compared as text, whatever type the column holds). The
+     * query still reads its own window; keys only narrow it, and never enter the SQL. A keyField no row carries is
+     * refused, so a pulse never takes a query without that column for "the target holds none of these".
+     */
+    static List<Map> keepLookupKeys(List<Map> rows, Collection keys, String keyField) {
+        if (!keyField) throw new IllegalArgumentException("A read by key needs the key field.")
+        Set<String> wanted = (keys ?: []).collect { it?.toString()?.trim() }.findAll { it } as Set<String>
+        if (rows && !rows.any { it.containsKey(keyField) }) {
+            throw new IllegalArgumentException("The query returns no ${keyField} column to read by key.".toString())
+        }
+        return rows.findAll { Map r -> wanted.contains(r.get(keyField)?.toString()?.trim()) }
+    }
+
+    /** DAR-BE-386: an extraction narrowed to lookupKeys (keepLookupKeys); a failed or empty one is returned as is. */
+    static Map filterExtraction(Map extraction, Collection keys, String keyField) {
+        if (extraction.errors || !extraction.outputText) return extraction
+        List<Map> rows = keepLookupKeys(new JsonSlurper().parseText(extraction.outputText as String) as List<Map>, keys, keyField)
+        return extraction + [dataAvailable: !rows.isEmpty(), outputText: rows.isEmpty() ? null : toOutputText(rows), recordCount: (long) rows.size()]
     }
 
     private static Map failure(List<String> errors, List warnings) {

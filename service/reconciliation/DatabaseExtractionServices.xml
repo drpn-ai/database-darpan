@@ -15,6 +15,13 @@
             <parameter name="windowEnd" type="Timestamp" required="true"/>
             <parameter name="outputLocation"/>
             <parameter name="fileName"/>
+            <parameter name="lookupKeys" type="List"><description>DAR-BE-386. Only the rows whose lookupKeyField holds one of these
+                (a pulse asking which orders the target holds, an audit re-checking its open findings). The query still reads
+                its window; the keys narrow it and never enter the SQL.</description></parameter>
+            <parameter name="lookupKeyField"><description>The result column lookupKeys are values of. Required with lookupKeys;
+                a column the query does not return is refused.</description></parameter>
+            <parameter name="lookupWithinWindow" type="Boolean"><description>Accepted for the by-key contract; a database
+                query always keeps its window.</description></parameter>
         </in-parameters>
         <out-parameters>
             <parameter name="dataAvailable" type="Boolean"/>

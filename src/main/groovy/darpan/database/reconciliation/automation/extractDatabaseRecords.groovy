@@ -69,6 +69,15 @@ if (ec.message.hasError()) {
 
 Map extraction = DatabaseExtractionSupport.runExtraction(
         new HashMap(configRow), new HashMap(queryRow), windowStart, windowEnd)
+// DAR-BE-386: a read by key (a pulse asking which orders the target holds, an audit re-checking its open findings)
+// narrows the query's own window to those keys.
+if (lookupKeys != null) {
+    try {
+        extraction = DatabaseExtractionSupport.filterExtraction(extraction, lookupKeys as Collection, lookupKeyField?.toString()?.trim())
+    } catch (IllegalArgumentException e) {
+        extraction = extraction + [errors: [e.message], dataAvailable: false, outputText: null, recordCount: 0L]
+    }
+}
 warnings = extraction.warnings ?: []
 errors = extraction.errors ?: []
 requestMetadata = extraction.requestMetadata ?: [:]

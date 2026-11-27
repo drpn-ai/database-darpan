@@ -110,4 +110,39 @@ class DatabaseExtractionSupportTests {
         assertEquals(1, parsed.size())
         assertEquals(1, parsed[0].id)
     }
+
+    // DAR-BE-386 (part 2): a pulse asks the target side which keys it holds; a database endpoint answers from its window.
+    @Test
+    void keysNarrowTheRowsToThoseAsked() {
+        List<Map> rows = [[order_name: "8H-1"], [order_name: "8H-2"], [order_name: "8H-3"]]
+        assertEquals([[order_name: "8H-2"]], DatabaseExtractionSupport.keepLookupKeys(rows, ["8H-2", "8H-9"], "order_name"))
+    }
+
+    @Test
+    void aKeyMatchesWhateverTypeTheColumnHolds() {
+        List<Map> rows = [[id: 1], [id: 2L], [id: "3"]]
+        assertEquals([[id: 2L], [id: "3"]], DatabaseExtractionSupport.keepLookupKeys(rows, ["2", "3"], "id"))
+    }
+
+    @Test
+    void aKeyColumnTheQueryDoesNotReturnIsRefused() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException) {
+            DatabaseExtractionSupport.keepLookupKeys([[id: 1]], ["1"], "order_name")
+        }
+        assertTrue(e.message.contains("order_name"), e.message)
+    }
+
+    @Test
+    void readingByKeyWritesOnlyThoseRows() {
+        Map out = DatabaseExtractionSupport.filterExtraction(
+                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1], [id: 2], [id: 3]]), recordCount: 3L, errors: [], warnings: []],
+                ["2"], "id")
+        assertEquals(1L, out.recordCount)
+        assertEquals([2], new JsonSlurper().parseText(out.outputText as String)*.id)
+        Map none = DatabaseExtractionSupport.filterExtraction(
+                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1]]), recordCount: 1L, errors: [], warnings: []],
+                ["9"], "id")
+        assertFalse(none.dataAvailable as boolean)
+        assertEquals(0L, none.recordCount)
+    }
 }
