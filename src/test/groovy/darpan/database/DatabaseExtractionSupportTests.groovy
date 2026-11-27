@@ -135,14 +135,28 @@ class DatabaseExtractionSupportTests {
     @Test
     void readingByKeyWritesOnlyThoseRows() {
         Map out = DatabaseExtractionSupport.filterExtraction(
-                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1], [id: 2], [id: 3]]), recordCount: 3L, errors: [], warnings: []],
-                ["2"], "id")
+                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1], [id: 2], [id: 3]]), recordCount: 3L, errors: [], warnings: [],
+                 requestMetadata: [recordCount: 3L]], ["2"], "id")
         assertEquals(1L, out.recordCount)
         assertEquals([2], new JsonSlurper().parseText(out.outputText as String)*.id)
+        assertEquals(1L, out.requestMetadata.recordCount, "the metadata counts what was written, not what the query read")
+    }
+
+    /** A read by key that finds none still writes "[]": audit re-checks and other-side reads take no file for a failure. */
+    @Test
+    void readingByKeyThatFindsNoneWritesAnEmptyList() {
         Map none = DatabaseExtractionSupport.filterExtraction(
-                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1]]), recordCount: 1L, errors: [], warnings: []],
-                ["9"], "id")
-        assertFalse(none.dataAvailable as boolean)
+                [dataAvailable: true, outputText: DatabaseExtractionSupport.toOutputText([[id: 1]]), recordCount: 1L, errors: [], warnings: [],
+                 requestMetadata: [recordCount: 1L]], ["9"], "id")
+        assertTrue(none.dataAvailable as boolean)
+        assertEquals("[]", none.outputText)
         assertEquals(0L, none.recordCount)
+        Map empty = DatabaseExtractionSupport.filterExtraction(
+                [dataAvailable: false, outputText: null, recordCount: 0L, errors: [], warnings: [], requestMetadata: [recordCount: 0L]], ["9"], "id")
+        assertTrue(empty.dataAvailable as boolean, "the window itself held nothing: still an answer")
+        assertEquals("[]", empty.outputText)
+        Map failed = DatabaseExtractionSupport.filterExtraction(
+                [dataAvailable: false, outputText: null, recordCount: 0L, errors: ["boom"], warnings: []], ["9"], "id")
+        assertFalse(failed.dataAvailable as boolean, "a failed read stays failed")
     }
 }

@@ -140,11 +140,17 @@ class DatabaseExtractionSupport {
         return rows.findAll { Map r -> wanted.contains(r.get(keyField)?.toString()?.trim()) }
     }
 
-    /** DAR-BE-386: an extraction narrowed to lookupKeys (keepLookupKeys); a failed or empty one is returned as is. */
+    /**
+     * DAR-BE-386: an extraction narrowed to lookupKeys (keepLookupKeys). A read by key always answers with a list, "[]" when
+     * none match: an audit re-check and a read by the other side's keys take a missing file for a failed read. A failed
+     * extraction is returned as is.
+     */
     static Map filterExtraction(Map extraction, Collection keys, String keyField) {
-        if (extraction.errors || !extraction.outputText) return extraction
-        List<Map> rows = keepLookupKeys(new JsonSlurper().parseText(extraction.outputText as String) as List<Map>, keys, keyField)
-        return extraction + [dataAvailable: !rows.isEmpty(), outputText: rows.isEmpty() ? null : toOutputText(rows), recordCount: (long) rows.size()]
+        if (extraction.errors) return extraction
+        List<Map> read = extraction.outputText ? (new JsonSlurper().parseText(extraction.outputText as String) as List<Map>) : []
+        List<Map> rows = keepLookupKeys(read, keys, keyField)
+        Map metadata = (extraction.requestMetadata ?: [:]) + [recordCount: (long) rows.size()]
+        return extraction + [dataAvailable: true, outputText: toOutputText(rows), recordCount: (long) rows.size(), requestMetadata: metadata]
     }
 
     private static Map failure(List<String> errors, List warnings) {
