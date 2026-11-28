@@ -27,13 +27,6 @@ class DatabaseQueryCrudTests {
                 'the parent config must be proven same-tenant')
     }
 
-    @Test void writeServicesGateOnTenantEditPermission() {
-        assertTrue(script('saveDatabaseSourceQuery').text.contains('canEditActiveTenantData'))
-        String x = facadeXml()
-        int start = x.indexOf('verb="delete" noun="DatabaseSourceQuery"')
-        assertTrue(x.substring(start, x.indexOf('</service>', start)).contains('canEditActiveTenantData'))
-    }
-
     @Test void validatorRejectsNonSelectAndUnknownPlaceholders() {
         assertFalse(SqlSelectValidator.validate("DELETE FROM order_header").isEmpty(),
                 'non-SELECT must be rejected')

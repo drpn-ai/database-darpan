@@ -39,6 +39,8 @@ class DatabaseSourceListDeleteServiceTests {
     private static final String EDITOR_USERNAME = "test.customer"
     private static final String NO_TENANT_ID = "DBLD_NO_TENANT_USER"
     private static final String NO_TENANT_USERNAME = "dbld.notenant"
+    private static final String VIEWER_ID = "DBLD_VIEWER_USER"
+    private static final String VIEWER_USERNAME = "dbld.viewer"
     private static final Timestamp FROM_DATE = Timestamp.valueOf("2026-04-21 00:00:00")
 
     private static final List<String> CONFIG_KEYS = ["databaseSourceConfigId", "description", "dialect", "host", "port",
@@ -61,8 +63,18 @@ class DatabaseSourceListDeleteServiceTests {
         insert("moqui.security.UserAccount", [userId: NO_TENANT_ID, username: NO_TENANT_USERNAME,
                                               userFullName: "No tenant", currentPassword: "", disabled: "N"])
         insert("moqui.security.UserGroupMember", [userGroupId: "DARPAN_USER", userId: NO_TENANT_ID, fromDate: FROM_DATE])
+        // OC200: a view-only member of KREWE.
+        insert("moqui.security.UserAccount", [userId: VIEWER_ID, username: VIEWER_USERNAME,
+                                              userFullName: "Viewer", currentPassword: "", disabled: "N"])
+        insert("moqui.security.UserGroupMember", [userGroupId: "DARPAN_USER", userId: VIEWER_ID, fromDate: FROM_DATE])
+        insert("moqui.security.UserGroupMember", [userGroupId: KREWE, userId: VIEWER_ID, fromDate: FROM_DATE])
+        insert("moqui.security.UserGroup", [userGroupId: TenantAccessSupport.DARPAN_COMPANY_VIEW_ONLY_GROUP_ID,
+                                            description: "View only", groupTypeEnumId: "UgtDarpanPermission"])
+        insert(TenantAccessSupport.TENANT_USER_PERMISSION_GROUP_MEMBER_ENTITY_NAME, [tenantUserGroupId: KREWE, userId: VIEWER_ID,
+                permissionUserGroupId: TenantAccessSupport.DARPAN_COMPANY_VIEW_ONLY_GROUP_ID, fromDate: FROM_DATE])
         // UserFacade reuses a login for the same username, cached groups included: switch user so
         // the DARPAN_USER membership above is seen.
+        actAs(VIEWER_USERNAME, KREWE)
         actAs(NO_TENANT_USERNAME, null)
         actAs(EDITOR_USERNAME, KREWE)
     }
@@ -233,6 +245,45 @@ class DatabaseSourceListDeleteServiceTests {
         assertEquals(false, out.ok)
         assertEquals(["You do not have permission to change database sources in this tenant."], ec.message.errors)
         assertNotNull(configRow("DBLD_CONF_K1"))
+    }
+
+    // ---------------------------------------------------------------- OC200: run access
+
+    /**
+     * DAR-OPS-029 S43 OC200. preview#DatabaseQuery runs a SELECT the caller writes against the tenant's database with the
+     * stored credentials, so it takes run access, like the saves: a view-only member is refused before any connection.
+     */
+    @Test
+    void previewRefusesAViewOnlyMember() {
+        actAs(VIEWER_USERNAME, KREWE)
+        assertFalse(TenantAccessSupport.canRunActiveTenantReconciliation(ec), "test precondition: the viewer cannot run")
+        assertTrue(TenantAccessSupport.canAccessTenantRecord(ec, configRow("DBLD_CONF_K1")), "test precondition: the row is in the viewer's tenant")
+        Map out = production { invoke("facade.DatabaseFacadeServices.preview#DatabaseQuery",
+                [databaseSourceConfigId: "DBLD_CONF_K1", sqlSelect: "SELECT 1 AS one"]) }
+        assertEquals("You do not have permission to run database queries in this tenant.", out.error)
+        assertEquals([], out.rows)
+        out = production { invoke("facade.DatabaseFacadeServices.preview#DatabaseQuery", [databaseSourceQueryId: "DBLD_Q_K1"]) }
+        assertEquals("You do not have permission to run database queries in this tenant.", out.error)
+    }
+
+    @Test
+    void validateRefusesAViewOnlyMember() {
+        actAs(VIEWER_USERNAME, KREWE)
+        Map out = invoke("facade.DatabaseFacadeServices.validate#DatabaseConnection", [databaseSourceConfigId: "DBLD_CONF_K1"], true)
+        assertEquals(false, out.ok)
+        assertEquals("You do not have permission to run database queries in this tenant.", out.error)
+    }
+
+    @Test
+    void aViewOnlyMemberListsConfigsWithoutCredentials() {
+        actAs(VIEWER_USERNAME, KREWE)
+        Map out = production { invoke("facade.DatabaseFacadeServices.list#DatabaseSourceConfigs", [:]) }
+        List configs = (out.configs as List).findAll { it.databaseSourceConfigId.toString().startsWith("DBLD_") }
+        assertEquals(["DBLD_CONF_K1", "DBLD_CONF_K2"], configs*.databaseSourceConfigId.sort())
+        configs.each { Map c ->
+            assertEquals(CONFIG_KEYS.toSet(), c.keySet(), "allowlist only")
+            assertFalse(c.containsKey("password") || c.containsKey("caCertPem"), "never the stored credential")
+        }
     }
 
     // ---------------------------------------------------------------- helpers

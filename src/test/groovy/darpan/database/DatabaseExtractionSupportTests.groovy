@@ -159,4 +159,53 @@ class DatabaseExtractionSupportTests {
                 [dataAvailable: false, outputText: null, recordCount: 0L, errors: ["boom"], warnings: []], ["9"], "id")
         assertFalse(failed.dataAvailable as boolean, "a failed read stays failed")
     }
+
+    /** A fake connection: what close() and each statement saw. failOn: SQL that throws. */
+    private static Map fakeConnection(Collection<String> failOn = []) {
+        Map seen = [closed: false, executed: [], timeouts: []]
+        java.sql.Statement stmt = [execute: { String sql -> seen.executed << sql; if (failOn.contains(sql)) throw new java.sql.SQLException("refused: ${sql}"); true },
+                                   setQueryTimeout: { int s -> seen.timeouts << s }, close: { -> }] as java.sql.Statement
+        Connection c = [setReadOnly: { boolean b -> }, setAutoCommit: { boolean b -> }, createStatement: { -> stmt },
+                        close: { -> seen.closed = true }] as Connection
+        return [connection: c, seen: seen]
+    }
+
+    /**
+     * DAR-OPS-029 S43 OC202. probe#DatabaseConnection read every dialect with "SELECT 1", which Db2 refuses (it needs
+     * SYSIBM.SYSDUMMY1): a healthy Db2 source read "Connection PASS" then "Connection FAIL". It uses the dialect's test
+     * query, with a 10 s timeout.
+     */
+    @Test
+    void probeReadsDb2WithItsOwnTestQuery() {
+        Map fake = fakeConnection(["SELECT 1"])
+        Map out = DatabaseExtractionSupport.probeChecks([dialect: "DB2", host: "203.0.113.10", databaseName: "orders",
+                username: "ro", password: "pw", requireTls: "N"]) { String url, Properties p -> fake.connection as Connection }
+        assertEquals(true, out.ok, out.toString())
+        assertEquals(["Address", "Connection", "Read access"], out.checks*.name)
+        assertEquals(["SELECT 1 FROM SYSIBM.SYSDUMMY1"], fake.seen.executed)
+        assertEquals([10], fake.seen.timeouts)
+        assertTrue(fake.seen.closed as boolean)
+    }
+
+    /** DAR-OPS-029 S43. A read-only fence that fails (a session statement the server refuses) closes the connection it opened. */
+    @Test
+    void aFailedReadOnlyFenceClosesTheConnection() {
+        Map fake = fakeConnection(["SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"])
+        assertThrows(java.sql.SQLException) { DatabaseExtractionSupport.fenceReadOnly(fake.connection as Connection, "POSTGRES") }
+        assertTrue(fake.seen.closed as boolean, "the connection is closed, not leaked")
+    }
+
+    /** The query/connection pair check both doors use: a missing connection, a blank tenant on either side, or two tenants fail. */
+    @Test
+    void queryConfigMismatchFailsClosed() {
+        Map q = [companyUserGroupId: 'KREWE', databaseSourceConfigId: 'C1']
+        assertNull(DatabaseExtractionSupport.queryConfigMismatch(q, [companyUserGroupId: 'KREWE']))
+        assertEquals('Database connection C1 not found.', DatabaseExtractionSupport.queryConfigMismatch(q, null))
+        assertEquals('Database source query or connection is missing tenant scope.',
+                DatabaseExtractionSupport.queryConfigMismatch([companyUserGroupId: null, databaseSourceConfigId: 'C1'], [companyUserGroupId: null]))
+        assertEquals('Database source query or connection is missing tenant scope.',
+                DatabaseExtractionSupport.queryConfigMismatch(q, [companyUserGroupId: ' ']))
+        assertEquals('Database connection and query belong to different tenants.',
+                DatabaseExtractionSupport.queryConfigMismatch(q, [companyUserGroupId: 'GORJANA']))
+    }
 }

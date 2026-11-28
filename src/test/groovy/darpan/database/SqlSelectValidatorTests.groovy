@@ -1,6 +1,7 @@
 package darpan.database
 
 import org.junit.jupiter.api.Test
+import static org.junit.jupiter.api.Assertions.assertEquals
 import static org.junit.jupiter.api.Assertions.assertFalse
 import static org.junit.jupiter.api.Assertions.assertTrue
 
@@ -65,5 +66,18 @@ class SqlSelectValidatorTests {
 
     @Test void acceptsBlockCommentOpenerInsideStringLiteral() {
         assertTrue(ok("SELECT id FROM t WHERE note = 'a /* b'"))
+    }
+
+    /**
+     * DAR-OPS-029 S43 OC203. MySQL reads a backslash before a quote as an escaped quote; Postgres (standard_conforming_strings,
+     * its default) ends the string at the backslash. Where the two disagree, text the validator took for a string is live
+     * SQL to Postgres, so a backslash before a quote inside a literal is refused. A doubled quote reads the same everywhere.
+     */
+    @Test void aBackslashBeforeAQuoteInsideALiteralIsRefused() {
+        ["SELECT 'it\\'s' AS x", "SELECT 'a\\' AS x FROM t WHERE ''=''", 'SELECT "a\\"" AS x'].each { String sql ->
+            assertTrue(SqlSelectValidator.validate(sql).contains("A backslash before a quote is not allowed in a string; write '' for a quote."),
+                    "${sql}: ${SqlSelectValidator.validate(sql)}")
+        }
+        assertEquals([], SqlSelectValidator.validate("SELECT 'it''s' AS x, 'C:\\path' AS p"))
     }
 }

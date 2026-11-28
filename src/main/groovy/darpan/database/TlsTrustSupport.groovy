@@ -57,6 +57,12 @@ class TlsTrustSupport {
     }
     private static Path trustDir
 
+    /** DAR-OPS-026: forgets the written trust files and the trust directory. Test-only. */
+    static void resetForTests() {
+        synchronized (CACHE) { CACHE.clear() }
+        synchronized (TlsTrustSupport) { trustDir = null }
+    }
+
     private static Map<String, String> write(String key, String pem, List<X509Certificate> certs) {
         Path d = dir()
         KeyStore ks = KeyStore.getInstance("PKCS12")
@@ -90,7 +96,7 @@ class TlsTrustSupport {
     private static String sha256(byte[] bytes) { return MessageDigest.getInstance("SHA-256").digest(bytes).encodeHex().toString() }
 
     /** The JVM's default trusted roots, plus the AWS RDS bundle when it is shipped. */
-    static List<X509Certificate> publicRoots() {
+    private static List<X509Certificate> publicRoots() {
         TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
         tmf.init((KeyStore) null)
         List<X509Certificate> roots = (tmf.trustManagers.find { it instanceof X509TrustManager } as X509TrustManager).acceptedIssuers as List

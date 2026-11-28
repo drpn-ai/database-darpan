@@ -33,6 +33,9 @@ class SqlSelectValidator {
     private static Map stripLiteralsAndComments(String raw) {
         StringBuilder out = new StringBuilder()
         List<String> errors = []
+        // OC203: MySQL reads \' as an escaped quote; Postgres (standard_conforming_strings, its default) ends the string at
+        // the backslash. Where they disagree, text read here as a string would be live SQL to Postgres.
+        boolean backslashQuote = false
         int n = raw.length()
         int i = 0
         while (i < n) {
@@ -42,7 +45,10 @@ class SqlSelectValidator {
                 boolean closed = false
                 while (j < n) {
                     char cj = raw.charAt(j)
-                    if (cj == ('\\' as char) && j + 1 < n) { j += 2; continue }
+                    if (cj == ('\\' as char) && j + 1 < n) {
+                        if (raw.charAt(j + 1) == ('\'' as char)) backslashQuote = true
+                        j += 2; continue
+                    }
                     if (cj == ('\'' as char)) {
                         if (j + 1 < n && raw.charAt(j + 1) == ('\'' as char)) { j += 2; continue }
                         j += 1
@@ -66,7 +72,10 @@ class SqlSelectValidator {
                 boolean closed = false
                 while (j < n) {
                     char cj = raw.charAt(j)
-                    if (cj == ('\\' as char) && j + 1 < n) { j += 2; continue }
+                    if (cj == ('\\' as char) && j + 1 < n) {
+                        if (raw.charAt(j + 1) == ('"' as char)) backslashQuote = true
+                        j += 2; continue
+                    }
                     if (cj == ('"' as char)) {
                         if (j + 1 < n && raw.charAt(j + 1) == ('"' as char)) { j += 2; continue }
                         j += 1
@@ -115,6 +124,7 @@ class SqlSelectValidator {
                 i += 1
             }
         }
+        if (backslashQuote) errors << "A backslash before a quote is not allowed in a string; write '' for a quote."
         return [stripped: out.toString(), errors: errors]
     }
 

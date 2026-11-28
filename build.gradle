@@ -4,7 +4,7 @@
  * Mirrors the sibling integration components (netsuite-darpan, shopify-darpan): the Groovy under
  * src/main/groovy is compiled and jarred into lib/ so Moqui's component class loader can pick it up
  * (Moqui only adds <component>/classes and <component>/lib/*.jar to the runtime classpath — it does
- * not compile src/ on its own). Later tasks add the JDBC extraction support classes here.
+ * not compile src/ on its own).
  */
 
 apply plugin: 'groovy'

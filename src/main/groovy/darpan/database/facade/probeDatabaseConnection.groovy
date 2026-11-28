@@ -1,9 +1,7 @@
-import darpan.database.JdbcUrlSupport
+import darpan.database.DatabaseExtractionSupport
 import darpan.facade.common.TenantAccessSupport
 
-import java.sql.Connection
 import java.sql.DriverManager
-import java.sql.Statement
 
 // Diagnostics only. Deliberately never calls ec.message.addError: test#SourceConnection renders
 // these rows into the connection-diagnostics popup, and a rejected credential is a normal result
@@ -17,33 +15,11 @@ TenantAccessSupport.requireTenantRecordAccess(ec, configRow,
         "Database source config ${databaseSourceConfigId} not found.")
 
 if (!ec.message.hasError() && configRow != null) {
-    Map config = configRow.getMap()
-    
-    String url = null
-    try {
-        url = JdbcUrlSupport.buildUrl(config)
-        checks << [name: "Address", status: "PASS", detail: url]
-    } catch (IllegalArgumentException e) {
-        checks << [name: "Address", status: "FAIL", detail: e.message]
+    Map probe = DatabaseExtractionSupport.probeChecks(configRow.getMap()) { String url, Properties properties ->
+        DriverManager.getConnection(url, properties)
     }
-
-    if (url) {
-        Connection conn = null
-        Statement stmt = null
-        try {
-            conn = DriverManager.getConnection(url, JdbcUrlSupport.connectionProperties(config))
-            checks << [name: "Connection", status: "PASS", detail: "Connected."]
-            stmt = conn.createStatement()
-            boolean readable = stmt.execute("SELECT 1")
-            checks << [name: "Read access", status: readable ? "PASS" : "FAIL", detail: "SELECT 1"]
-            ok = readable
-        } catch (Exception e) {
-            checks << [name: "Connection", status: "FAIL", detail: e.message]
-        } finally {
-            try { stmt?.close() } catch (Exception ignored) {}
-            try { conn?.close() } catch (Exception ignored) {}
-        }
-    }
+    ok = probe.ok == true
+    checks = probe.checks as List
 }
 
 ec.context.ok = ok

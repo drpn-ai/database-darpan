@@ -5,6 +5,12 @@ import darpan.facade.common.TenantAccessSupport
 import java.sql.Connection
 import java.sql.Timestamp
 
+// OC200: a preview runs a SELECT the caller writes against the tenant's database with the stored credentials, so it takes
+// run access, as the saves do; a view-only member is refused before any read.
+if (!TenantAccessSupport.canRunActiveTenantReconciliation(ec)) {
+    error = "You do not have permission to run database queries in this tenant."; rows = []; columns = []; return
+}
+
 String sql = sqlSelect
 Map config = null
 if (databaseSourceQueryId) {
@@ -16,24 +22,10 @@ if (databaseSourceQueryId) {
         sql = queryRow.sqlSelect
         def configRow = ec.entity.find("darpan.database.DatabaseSourceConfig")
                 .condition("databaseSourceConfigId", queryRow.databaseSourceConfigId).disableAuthz().useCache(false).one()
-        // Explicit tenant guard for this disableAuthz read: queryRow is already tenant-checked above,
-        // but its databaseSourceConfigId FK is not itself tenant-scoped at the DB level, so a
-        // same-tenant cross-check is required here too (mirrors extractDatabaseRecords.groovy's
-        // config/query cross-tenant check — the branch flagged as most safety-critical there).
-        String queryTenant = queryRow.companyUserGroupId?.toString()?.trim()
-        String configTenant = configRow?.companyUserGroupId?.toString()?.trim()
-        if (!configRow) {
-            ec.message.addError("Database connection ${queryRow.databaseSourceConfigId} not found.")
-        } else if (!queryTenant || !configTenant) {
-            // Fail CLOSED on a null/blank tenant on EITHER side. companyUserGroupId is nullable on both
-            // entities, so a bare equality below would read null==null as "same tenant" and let a
-            // scope-less pair through unverified. Missing tenant scope is never a valid preview.
-            ec.message.addError("Database source query or connection is missing tenant scope.")
-        } else if (configTenant != queryTenant) {
-            ec.message.addError("Database connection and query belong to different tenants.")
-        } else {
-            config = new HashMap(configRow)
-        }
+        // The query row is tenant-checked above; its databaseSourceConfigId is a plain FK, so the pair is checked too.
+        String mismatch = DatabaseExtractionSupport.queryConfigMismatch(queryRow, configRow)
+        if (mismatch) ec.message.addError(mismatch)
+        else config = new HashMap(configRow)
     }
 } else if (databaseSourceConfigId) {
     if (!sqlSelect) {
@@ -53,7 +45,7 @@ if (ec.message.hasError()) { error = ec.message.getErrors().join("; "); ec.messa
 List<String> validation = SqlSelectValidator.validate(sql)
 if (validation) { error = validation.join(" "); rows = []; columns = []; return }
 
-Timestamp end = windowEnd ?: new Timestamp(System.currentTimeMillis())
+Timestamp end = windowEnd ?: ec.user.nowTimestamp
 Timestamp start = windowStart ?: new Timestamp(end.time - 7L * 24 * 3600 * 1000)
 
 Connection conn = null

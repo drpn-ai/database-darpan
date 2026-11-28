@@ -19,7 +19,7 @@
         <field name="password" type="text-medium" encrypt="true"/>
         <field name="requireTls" type="text-indicator" default="'Y'"/>
         <field name="caCertPem" type="text-very-long">
-            <description>Optional CA certificate (PEM) for sslMode=VERIFY_CA.</description>
+            <description>Optional CA certificate (PEM) the connection trusts when requireTls is Y (TlsTrustSupport); blank trusts the public roots and the RDS bundle.</description>
         </field>
         <field name="connectTimeoutSeconds" type="number-integer" default="10"/>
         <field name="queryTimeoutSeconds" type="number-integer" default="300"/>

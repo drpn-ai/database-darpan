@@ -34,17 +34,19 @@ class DatabaseServiceExposureTests {
                 'extract takes companyUserGroupId as a parameter; exposing it hands over the tenant fence')
     }
 
-    @Test void extractFailsClosedOnBlankTenantOnEitherSide() {
-        String g = new File('src/main/groovy/darpan/database/reconciliation/automation/extractDatabaseRecords.groovy').text
-        assertTrue(g.contains('Fail CLOSED'),
-                'the null-tenant guard is load-bearing; do not remove without replacing the check')
-        assertTrue(g.contains('queryTenant') && g.contains('configTenant'),
-                'both sides are compared, not just the query row')
+    /** The query/connection tenant check is one helper (DatabaseExtractionSupportTests pins its behavior); both doors use it. */
+    @Test void extractAndPreviewApplyTheSameCrossCheck() {
+        ['src/main/groovy/darpan/database/reconciliation/automation/extractDatabaseRecords.groovy',
+         'src/main/groovy/darpan/database/facade/previewDatabaseQuery.groovy'].each { String path ->
+            assertTrue(new File(path).text.contains('DatabaseExtractionSupport.queryConfigMismatch(queryRow, configRow)'),
+                    "${path}: preview must not be a weaker door to the same data than extract")
+        }
     }
 
-    @Test void previewAppliesTheSameCrossCheckAsExtract() {
-        String g = new File('src/main/groovy/darpan/database/facade/previewDatabaseQuery.groovy').text
-        assertTrue(g.contains('queryTenant') && g.contains('configTenant'),
-                'preview must not be a weaker door to the same data than extract')
+    /** OC200: the two services that connect for a caller take run access. */
+    @Test void previewAndValidateGateOnRunAccess() {
+        ['previewDatabaseQuery', 'validateDatabaseConnection'].each { String name ->
+            assertTrue(new File("src/main/groovy/darpan/database/facade/${name}.groovy").text.contains('canRunActiveTenantReconciliation'), name)
+        }
     }
 }

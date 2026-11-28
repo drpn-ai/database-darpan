@@ -4,6 +4,11 @@ import darpan.facade.common.TenantAccessSupport
 import java.sql.Connection
 import java.sql.DriverManager
 
+// OC200: connecting with a saved credential, or with credentials the caller types, takes run access, as the saves do.
+if (!TenantAccessSupport.canRunActiveTenantReconciliation(ec)) {
+    ok = false; error = "You do not have permission to run database queries in this tenant."; return
+}
+
 Map config
 if (databaseSourceConfigId) {
     def row = ec.entity.find("darpan.database.DatabaseSourceConfig")
@@ -24,8 +29,13 @@ Connection conn = null
 try {
     conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config),
             JdbcUrlSupport.connectionProperties(config))
-    def st = conn.createStatement(); st.setQueryTimeout(10)
-    st.executeQuery(JdbcUrlSupport.testQuery(JdbcUrlSupport.dialectOf(config))).close()
+    def st = conn.createStatement()
+    try {
+        st.setQueryTimeout(10)
+        st.executeQuery(JdbcUrlSupport.testQuery(JdbcUrlSupport.dialectOf(config))).close()
+    } finally {
+        st.close()
+    }
     serverVersion = conn.metaData.databaseProductVersion
     ok = true
     error = null

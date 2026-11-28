@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    <!-- The database source API. probe#DatabaseConnection is live (the DATABASE connector's health check, through
+         test#SourceConnection). The others (save/list/delete of connections and queries, preview, validate) have no app or
+         CLI caller yet: they are kept as the API a future database settings page will use (Aditi 2026-11-28, DAR-OPS-029
+         S43). They stay out of the CLI allowlist, since the CLI never does what the app cannot. Every one is gated like
+         the other connection services: tenant scope on each row, and run access (canRunActiveTenantReconciliation) for
+         anything that writes or connects. -->
     <service verb="validate" noun="DatabaseConnection" type="script" transaction="ignore" authenticate="true"
             location="component://database-darpan/src/main/groovy/darpan/database/facade/validateDatabaseConnection.groovy">
-        <description>Connects and runs the dialect test query. Accepts a saved config id or transient fields (pre-save test).</description>
+        <description>Connects and runs the dialect test query. Accepts a saved config id or transient fields (pre-save test). Run access only (OC200).</description>
         <in-parameters>
             <parameter name="databaseSourceConfigId"/>
             <parameter name="host"/><parameter name="port" type="Long"/>
@@ -18,7 +24,7 @@
     </service>
     <service verb="preview" noun="DatabaseQuery" type="script" transaction="ignore" allow-remote="true" authenticate="true"
             location="component://database-darpan/src/main/groovy/darpan/database/facade/previewDatabaseQuery.groovy">
-        <description>Validates and runs a SELECT capped at 10 rows for the query editor preview.</description>
+        <description>Validates and runs a SELECT capped at 10 rows for the query editor preview. Run access only (OC200): it reads the tenant's database with the stored credentials.</description>
         <in-parameters>
             <parameter name="databaseSourceQueryId"/>
             <parameter name="databaseSourceConfigId"/>

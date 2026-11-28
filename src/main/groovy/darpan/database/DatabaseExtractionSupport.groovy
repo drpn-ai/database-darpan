@@ -14,6 +14,8 @@ import java.util.regex.Pattern
 
 class DatabaseExtractionSupport {
     private static final Pattern NAMED_PLACEHOLDER = Pattern.compile(/:(windowStart|windowEnd)\b/)
+    /** probe#DatabaseConnection's read check: long enough for a cold server, short enough for a diagnostics popup. */
+    static final int PROBE_QUERY_TIMEOUT_SECONDS = 10
 
     /** Replace :windowStart/:windowEnd with '?' preserving order of appearance. A placeholder token
      * that falls inside a string literal or comment is left untouched — it is text data, not a real
@@ -86,15 +88,64 @@ class DatabaseExtractionSupport {
     static Connection openReadOnlyConnection(Map config) {
         Connection conn = DriverManager.getConnection(JdbcUrlSupport.buildUrl(config),
                 JdbcUrlSupport.connectionProperties(config))
-        conn.setReadOnly(true)
-        conn.setAutoCommit(false)
-        for (String stmtSql : JdbcUrlSupport.readOnlySessionStatements(JdbcUrlSupport.dialectOf(config))) {
-            conn.createStatement().execute(stmtSql)
-        }
-        return conn
+        return fenceReadOnly(conn, JdbcUrlSupport.dialectOf(config))
     }
 
-    /** Full extraction against the configured MySQL database. Kept free of Moqui APIs so it is unit-testable. */
+    /** The read-only fence on an open connection: setReadOnly(true), setAutoCommit(false), then the dialect's session statements. */
+    static Connection fenceReadOnly(Connection conn, String dialect) {
+        try {
+            conn.setReadOnly(true)
+            conn.setAutoCommit(false)
+            for (String stmtSql : JdbcUrlSupport.readOnlySessionStatements(dialect)) {
+                java.sql.Statement stmt = conn.createStatement()
+                try { stmt.execute(stmtSql) } finally { stmt.close() }
+            }
+            return conn
+        } catch (Exception e) {
+            // A connection the fence could not close down is never handed out, and never left open.
+            try { conn.close() } catch (Exception ignored) { }
+            throw e
+        }
+    }
+
+    /**
+     * Connection diagnostics for probe#DatabaseConnection: the rows test#SourceConnection shows (Address, Connection, Read
+     * access) and ok. connect(url, properties) opens the connection (DriverManager in production). Never throws.
+     */
+    static Map probeChecks(Map config, Closure<Connection> connect) {
+        List checks = []
+        boolean ok = false
+        String url = null
+        try {
+            url = JdbcUrlSupport.buildUrl(config)
+            checks << [name: "Address", status: "PASS", detail: url]
+        } catch (IllegalArgumentException e) {
+            checks << [name: "Address", status: "FAIL", detail: e.message]
+        }
+        if (url) {
+            Connection conn = null
+            java.sql.Statement stmt = null
+            try {
+                conn = connect.call(url, JdbcUrlSupport.connectionProperties(config))
+                checks << [name: "Connection", status: "PASS", detail: "Connected."]
+                stmt = conn.createStatement()
+                stmt.setQueryTimeout(PROBE_QUERY_TIMEOUT_SECONDS)
+                // OC202: the dialect's own test query; Db2 refuses a bare SELECT 1
+                String testQuery = JdbcUrlSupport.testQuery(JdbcUrlSupport.dialectOf(config))
+                boolean readable = stmt.execute(testQuery)
+                checks << [name: "Read access", status: readable ? "PASS" : "FAIL", detail: testQuery]
+                ok = readable
+            } catch (Exception e) {
+                checks << [name: "Connection", status: "FAIL", detail: e.message]
+            } finally {
+                try { stmt?.close() } catch (Exception ignored) {}
+                try { conn?.close() } catch (Exception ignored) {}
+            }
+        }
+        return [ok: ok, checks: checks]
+    }
+
+    /** Full extraction against the configured database (MySQL, PostgreSQL or Db2). Kept free of Moqui APIs so it is unit-testable. */
     static Map runExtraction(Map config, Map query, Timestamp windowStart, Timestamp windowEnd) {
         List warnings = []
         List<String> validation = SqlSelectValidator.validate(query.sqlSelect as String)
@@ -151,6 +202,20 @@ class DatabaseExtractionSupport {
         List<Map> rows = keepLookupKeys(read, keys, keyField)
         Map metadata = (extraction.requestMetadata ?: [:]) + [recordCount: (long) rows.size()]
         return extraction + [dataAvailable: true, outputText: toOutputText(rows), recordCount: (long) rows.size(), requestMetadata: metadata]
+    }
+
+    /**
+     * Why a query and its connection may not be used together, or null when they may: the connection must exist and
+     * both must carry the same non-blank tenant (companyUserGroupId is nullable on both, and null==null is no tenant).
+     * Shared by extract#DatabaseRecords and preview#DatabaseQuery.
+     */
+    static String queryConfigMismatch(def queryRow, def configRow) {
+        String queryTenant = queryRow?.get("companyUserGroupId")?.toString()?.trim()
+        String configTenant = configRow?.get("companyUserGroupId")?.toString()?.trim()
+        if (configRow == null) return "Database connection ${queryRow?.get('databaseSourceConfigId')} not found.".toString()
+        if (!queryTenant || !configTenant) return "Database source query or connection is missing tenant scope."
+        if (configTenant != queryTenant) return "Database connection and query belong to different tenants."
+        return null
     }
 
     private static Map failure(List<String> errors, List warnings) {
